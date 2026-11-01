@@ -150,6 +150,14 @@ npm run audit:release -- --packaged
 
 前者使用隔离目录检查正式包启动及真实公开首页；后者检查源码发布允许列表、敏感内容及 `release/linux-unpacked/resources/app.asar` 中的应用内容。执行前须已生成对应未压缩应用目录。工具输出通过只代表其实际检查范围。
 
+## 主窗口标题栏
+
+主窗口使用 Electron 无边框窗口，保留原生阴影和缩放边界。标题区域标记为 `app-region: drag`，按钮区域为 `no-drag`。
+
+`window.state` 查询窗口状态；`window.minimize`、`window.toggleMaximize`、`window.close` 执行窗口操作，`window` 事件同步最大化、最小化及焦点状态。这些新增接口只允许主窗口调用。关闭操作沿用窗口生命周期，不以强制退出替代，避免中断悬浮卡片播放。
+
+运行 `node scripts/smoke-desktop.cjs` 可在隔离资料目录检查原生 Wayland／X11 窗口操作；无头检查无法替代实体指针拖动和桌面手势验收。
+
 ## 公开文档与本机资料
 
 仓库采用允许列表。依赖、构建目录、安装包、日志、会话、历史、下载、私人壁纸、私人 PEQ、测试截图及 Chromium 用户资料不应提交。不要使用强制添加绕过私人资料的忽略规则。

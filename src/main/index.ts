@@ -11,7 +11,7 @@ import { Player, type SavedQueue } from './player'
 import { isTrack, validateCommand } from './validation'
 import { MusicError, publicError } from '../shared/errors'
 import { QUALITIES, type AppEvent, type Bootstrap, type Command, type DownloadTask, type Session, type Settings, type User } from '../shared/types'
-import type { MiniState } from '../shared/types'
+import type { MiniState, WindowState } from '../shared/types'
 import { experienceDefaults, normalizeExperience } from '../shared/preferences'
 import { parsePeq } from '../shared/peq'
 import { MediaLibrary } from './media'
@@ -57,6 +57,10 @@ const send = (event: AppEvent) => {
 function syncSpectrum() {
   if (!player || !settings || !visualizer) return
   visualizer.update(spectrumSubscribed && settings.spectrum.enabled && player.state.status==='playing' && !!window?.isVisible() && !window?.isMinimized(), player.processId, player.state.deviceId, player.state.queue[player.state.index]?.id || '')
+}
+function windowSnapshot(): WindowState {
+  const current=window && !window.isDestroyed()?window:null
+  return {maximized:current?.isMaximized()||false,minimized:current?.isMinimized()||false,focused:current?.isFocused()||false}
 }
 function miniSnapshot(): MiniState {
   const state=player?.state, track=state?.queue[state.index] || null
@@ -194,6 +198,10 @@ async function handle(command: Command, args: any): Promise<any> {
       if(epoch!==authEpoch) return
       await backend.call('library.like',{id:track.id,like:!miniLikes.has(track.id)}); send({type:'library',data:null}); return
     }
+    case 'window.state': return windowSnapshot()
+    case 'window.minimize': window?.minimize(); return
+    case 'window.toggleMaximize': if(window) { if(window.isMaximized()) window.unmaximize(); else window.maximize() }; return
+    case 'window.close': { const current=window; setTimeout(()=>{if(current&&!current.isDestroyed())current.close()},50); return }
     case 'window.restore': if(window) { window.show(); if(window.isMinimized()) window.restore(); window.focus() }; return
     case 'app.quit': app.quit(); return
     case 'settings.pickDirectory': {
@@ -292,7 +300,7 @@ async function initialize() {
   checkpoint.unref()
 }
 function createWindow() {
-  window = new BrowserWindow({ width: 1440, height: 940, minWidth: 1000, minHeight: 680, show: false, title: 'Libitum music', backgroundColor: '#f7f8fa', autoHideMenuBar: true, icon: join(app.getAppPath(), 'resources/icon.png'), webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true } })
+  window = new BrowserWindow({ width: 1440, height: 940, minWidth: 1000, minHeight: 680, frame: false, hasShadow: true, show: false, title: 'Libitum music', backgroundColor: '#f7f8fa', autoHideMenuBar: true, icon: join(app.getAppPath(), 'resources/icon.png'), webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true } })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', event => event.preventDefault())
   window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
@@ -301,6 +309,8 @@ function createWindow() {
     const csp = `default-src 'self'; script-src 'self'${dev ? " 'unsafe-inline'" : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' music-app: https: data:; media-src 'self' music-app:; connect-src 'self'${dev ? ' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*' : ''}; object-src 'none'; frame-src 'none'; base-uri 'none'`
     callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [csp] } })
   })
+  const syncWindow=()=>send({type:'window',data:windowSnapshot()})
+  window.on('maximize',syncWindow).on('unmaximize',syncWindow).on('minimize',syncWindow).on('restore',syncWindow).on('focus',syncWindow).on('blur',syncWindow)
   window.once('ready-to-show', () => window?.show())
   window.on('close',event=>{ if(!exiting && settings.floatingEnabled && miniWindow) { event.preventDefault(); window?.hide(); syncSpectrum() } })
   window.on('show',syncSpectrum); window.on('hide',syncSpectrum); window.on('minimize',syncSpectrum); window.on('restore',syncSpectrum)

@@ -42,6 +42,7 @@ export interface MediaImportState { status: 'idle' | 'working' | 'completed' | '
 export interface SpectrumFrame { bins: number[]; status: 'active' | 'idle' | 'unavailable'; reason?: string }
 export type AppearanceSettings = Pick<Settings, 'theme' | 'autoWallpaperText' | 'backgroundColor' | 'fontColor' | 'fontFamily' | 'visualMode' | 'wallpaper' | 'wallpaperBrightness' | 'wallpaperOverlay' | 'wallpaperBlur' | 'panelBlur' | 'panelOpacity'>
 export type MiniAppearance = AppearanceSettings & Pick<Settings, 'floatingOpacity'>
+export interface WindowState { maximized: boolean; minimized: boolean; focused: boolean }
 export interface MiniState { appearance: MiniAppearance; track: Track | null; status: PlayerState['status']; position: number; duration: number; volume: number; liked: boolean }
 export interface ExperienceSettings {
   commentsEnabled: boolean; autoWallpaperText: boolean; backgroundColor: string; fontColor: string; fontFamily: string; rotateCover: boolean; visualMode: 'cover' | 'wallpaper'; wallpaperScope: 'player' | 'app'
@@ -117,12 +118,16 @@ export interface CommandMap {
   'mini.bootstrap': { args: void; result: MiniState }
   'mini.like': { args: void; result: void }
   'mini.close': { args: void; result: void }
+  'window.state': { args: void; result: WindowState }
+  'window.minimize': { args: void; result: void }
+  'window.toggleMaximize': { args: void; result: void }
+  'window.close': { args: void; result: void }
   'window.restore': { args: void; result: void }
   'app.quit': { args: void; result: void }
   'app.openExternal': { args: { url: string }; result: void }
 }
 export type Command = keyof CommandMap
-export type AppEvent = { type: 'player'; data: PlayerState } | { type: 'session'; data: Session } | { type: 'downloads'; data: DownloadTask[] } | { type: 'settings'; data: Settings } | { type: 'library'; data: null } | { type: 'notice'; data: string } | { type: 'spectrum'; data: SpectrumFrame } | { type: 'mediaImport'; data: MediaImportState } | { type: 'mini'; data: MiniState }
+export type AppEvent = { type: 'window'; data: WindowState } | { type: 'player'; data: PlayerState } | { type: 'session'; data: Session } | { type: 'downloads'; data: DownloadTask[] } | { type: 'settings'; data: Settings } | { type: 'library'; data: null } | { type: 'notice'; data: string } | { type: 'spectrum'; data: SpectrumFrame } | { type: 'mediaImport'; data: MediaImportState } | { type: 'mini'; data: MiniState }
 export interface DesktopAPI {
   invoke<K extends Command>(command: K, args?: CommandMap[K]['args']): Promise<Result<CommandMap[K]['result']>>
   onEvent(listener: (event: AppEvent) => void): () => void

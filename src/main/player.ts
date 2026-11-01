@@ -1,7 +1,6 @@
 import type { DownloadTask, PeqSettings, PlayerState, Quality, RadioSpec, Settings, Stream, Track } from '../shared/types'
 import { resolveDevices } from './devices'
 import { defaultPeq, peqGraph, validPeq } from '../shared/peq'
-import { QUALITIES } from '../shared/types'
 import { MusicError } from '../shared/errors'
 import { Mpv } from './mpv'
 import { nextIndex } from './queue'
@@ -163,7 +162,6 @@ export class Player {
       const stream = this.local?.id === track.id ? this.local.stream : await this.backend.call<Stream>('resolve', { id: track.id, quality: this.state.requestedQuality })
       if (generation !== this.generation) return
       this.state.actualQuality = stream.quality; this.state.bitrate = stream.bitrate; this.state.trial = stream.trial
-      if (stream.quality && stream.quality !== this.state.requestedQuality) this.state.notice = `当前实际音质：${QUALITIES[stream.quality as Quality] || stream.quality}`
       if (stream.trial) this.state.notice = '当前账号只能播放本歌曲的试听片段。'
       await this.mpv.command(['set_property', 'pause', true])
       await this.mpv.command(['set_property', 'audio-device', this.state.deviceId])

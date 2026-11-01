@@ -14,6 +14,11 @@ async function main() {
     const packaged = await instance.evaluate(({ app }) => app.isPackaged)
     const result = await page.evaluate(() => window.music.invoke('app.bootstrap'))
     if (!packaged || !result.ok || !result.data.player.available) throw new Error('Packaged startup failed')
+    await page.waitForSelector('.app-titlebar')
+    const titlebarHeight=await page.locator('.app-titlebar').evaluate(e=>e.getBoundingClientRect().height)
+    if(titlebarHeight!==36)throw new Error('Packaged titlebar height mismatch')
+    const windowState=await page.evaluate(()=>window.music.invoke('window.state'))
+    if(!windowState.ok||typeof windowState.data.maximized!=='boolean')throw new Error('Packaged window state unavailable')
     const opening=instance.waitForEvent('window')
     const enabled=await page.evaluate(()=>window.music.invoke('settings.update',{floatingEnabled:true,floatingOpacity:.5}))
     if(!enabled.ok)throw new Error('Packaged card did not enable')
@@ -21,9 +26,10 @@ async function main() {
     await card.waitForFunction(()=>getComputedStyle(document.querySelector('.mini-background')).opacity==='0.5')
     const cardSize=await card.evaluate(()=>[innerWidth,innerHeight])
     if(cardSize[0]!==280||cardSize[1]!==64)throw new Error('Packaged card size mismatch')
+    const mainControl=await card.evaluate(()=>window.music.invoke('window.close'));if(mainControl.ok)throw new Error('Packaged window control leak')
     const privateAccess=await card.evaluate(()=>window.music.invoke('app.bootstrap'))
     if(privateAccess.ok)throw new Error('Packaged card capability leak')
-    const report = { cardSize,cardBackgroundOpacity:.5,restrictedIPC:true,version: await instance.evaluate(({ app }) => app.getVersion()), packaged, playerAvailable: result.data.player.available, devices: result.data.player.devices.length, fixtureDisabled: result.data.session.user === null }
+    const report = { titlebarHeight,cardSize,cardBackgroundOpacity:.5,restrictedIPC:true,version: await instance.evaluate(({ app }) => app.getVersion()), packaged, playerAvailable: result.data.player.available, devices: result.data.player.devices.length, fixtureDisabled: result.data.session.user === null }
     if (process.argv.includes('--network')) {
       const home = await page.evaluate(() => window.music.invoke('home.section', { section: 'recommended' }))
       if (!home.ok || !home.data.collections.length) throw new Error('Packaged public homepage failed')

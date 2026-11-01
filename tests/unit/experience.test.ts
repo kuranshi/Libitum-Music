@@ -53,6 +53,7 @@ describe('experience settings and audio processing',()=>{
   })
   it('rejects arbitrary file access and malformed processing commands at the IPC boundary',()=>{
     expect(()=>validateCommand('settings.update',{autoWallpaperText:'yes'})).toThrow()
+    for(const command of ['window.state','window.minimize','window.toggleMaximize','window.close']){expect(()=>validateCommand(command,undefined)).not.toThrow();expect(()=>validateCommand(command,{id:1})).toThrow()}
     expect(()=>validateCommand('settings.update',{fontFamily:'url(https://invalid)'})).toThrow()
     expect(()=>validateCommand('settings.update',{fontColor:'red;display:none'})).toThrow()
     expect(()=>validateCommand('settings.update',{autoWallpaperText:true,fontFamily:'Noto Sans CJK SC',backgroundColor:'#123456'})).not.toThrow()
