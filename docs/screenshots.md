@@ -13,7 +13,7 @@ README 中的 PNG 均直接截取自本项目构建后的 Electron 应用界面�
 | [equalizer.png](images/equalizer.png) | 十段参数均衡器与前级 | 同一隔离示例会话；通过实际设置界面修改并应用示例参数，不是耳机校准建议。 |
 | [mini-player.png](images/mini-player.png) | 独立悬浮播放卡片 | 同一示例曲目和实际播放进度，独立 Electron 窗口。 |
 
-示例账号与曲目定义在 [`src/main/test-fixtures.ts`](../src/main/test-fixtures.ts)。这些画面展示应用交互，不代表真实账号的收藏同步、会员权限、硬件音频或桌面窗口置顶已完成验收；验证边界见 [VALIDATION.md](../VALIDATION.md)。公开推荐中的封面和内容来自网易云服务，相关权利归原权利人所有。
+示例账号与曲目定义在 [`src/main/test-fixtures.ts`](https://github.com/kuranshi/Libitum-Music/blob/cd3e41b993a879b77c572cc9591c3bbd00e2950c/src/main/test-fixtures.ts)。这些画面展示应用交互，不代表真实账号的收藏同步、会员权限、硬件音频或桌面窗口置顶已完成验收；验证边界见 [VALIDATION.md](../VALIDATION.md)。公开推荐中的封面和内容来自网易云服务，相关权利归原权利人所有。
 
 ## 拍摄环境
 
@@ -42,4 +42,4 @@ npm run audit:release
 
 截图脚本沿用隔离 Electron 流程的无头启动参数，其中 `--no-sandbox` 仅用于这次临时截图过程，普通安装与日常启动请使用 README 中的命令。
 
-四个 PNG 是专门审核的公开文档资源，在 `.gitignore` 和发布审计中按文件名放行。测试截图、运行日志、个人媒体和账号数据仍保持忽略；文档截图不会打入 AppImage 或 DEB。
+四个 PNG 是专门审核的公开文档资源，在 `.gitignore` 和发布审计中按文件名放行。测试截图、运行日志、个人媒体和账号数据仍保持忽略。DEB 附带这些公开图片与指南供离线阅读；AppImage 不包含文档截图，应用本身也不加载它们。

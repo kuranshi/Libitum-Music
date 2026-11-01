@@ -25,11 +25,9 @@ Libitum music 是面向 Linux 的中文网易云音乐与 QQ 音乐桌面客户�
 
 QQ 不支持的功能不会改用网易云内容。播放或下载始终受对应平台的会员、购买与版权权限限制；下载所选音质与返回音质不符时需要重新选择，不把试听保存为完整歌曲。QQ 收藏结果未知时，先点击“状态待确认”刷新核对，再决定是否重新操作。
 
-QQ 接入目前位于开发分支，`v0.2.0-rc.3` 发布包不含此功能；使用当前源码构建体验。
-
 ## 安装与升级
 
-当前候选版本为 [`v0.2.0-rc.3`](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.2.0-rc.3)，应用与安装包内部版本为 `0.2.0`。在发布页的 **Assets** 中下载安装包；`Source code.zip` 是源码。这是供体验和反馈的预发布版本，已完成的检查和兼容范围见[验证记录](../VALIDATION.md)。
+当前双平台测试版本为 [`v0.3.0-rc.1`](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.3.0-rc.1)，应用版本为 `0.3.0-rc.1`，对应 `test-other-platform` 分支。在发布页的 **Assets** 中下载安装包；`Source code.zip` 是源码。这是供体验和反馈的预发布版本，真实账号权限、同步及硬件兼容的验证范围见[验证记录](../VALIDATION.md)。
 
 ### Ubuntu：推荐 .deb
 
@@ -37,27 +35,23 @@ QQ 接入目前位于开发分支，`v0.2.0-rc.3` 发布包不含此功能；使
 
 ```bash
 sudo apt update
-sudo apt install ./libitum-music-0.2.0-amd64.deb
+sudo apt install ./libitum-music-0.3.0-rc.1-amd64.deb
 cloud-music-player
 ```
 
 安装器会处理 mpv、FFmpeg、PulseAudio 工具和桌面运行库依赖。安装后也可从应用菜单打开 **Libitum music**。文件在其他位置时，请使用实际完整路径，并为含空格的路径加引号。
 
-升级前通过“退出应用”完全退出，再运行安装命令。内部 Debian 包名为 `cloud-music-player`，升级会保留本机账号、设置、队列与下载。候选版本内部版本号相同时，替换安装使用：
-
-```bash
-sudo apt install --reinstall ./libitum-music-0.2.0-amd64.deb
-```
+升级前通过“退出应用”完全退出，再运行上述安装命令。内部 Debian 包名为 `cloud-music-player`，升级会保留本机账号、设置、队列与下载。
 
 ### AppImage
 
-下载 `libitum-music-0.2.0-x86_64.AppImage`。Ubuntu 24.04 可运行：
+下载 `libitum-music-0.3.0-rc.1-x86_64.AppImage`。Ubuntu 24.04 可运行：
 
 ```bash
 sudo apt update
 sudo apt install mpv ffmpeg pulseaudio-utils libsecret-1-0 libfuse2t64
-chmod +x ./libitum-music-0.2.0-x86_64.AppImage
-./libitum-music-0.2.0-x86_64.AppImage
+chmod +x ./libitum-music-0.3.0-rc.1-x86_64.AppImage
+./libitum-music-0.3.0-rc.1-x86_64.AppImage
 ```
 
 Ubuntu 22.04 请把 `libfuse2t64` 替换为 `libfuse2`。FUSE 2 与 FUSE 3 可以共存，无需卸载桌面正在使用的 FUSE 3。参见 [AppImage 的 FUSE 说明](https://docs.appimage.org/user-guide/troubleshooting/fuse.html)。
@@ -208,7 +202,7 @@ QQ 音乐继续使用同一安全存储流程。`qqmusic-device.json` 仅保存�
 | 情况 | 处理方式 |
 | --- | --- |
 | 安装提示找不到 `.deb` | 确认实际文件名与当前目录，或使用完整路径 |
-| 更新后仍是旧候选构建 | 完全退出应用，再对同版本安装包执行 `apt install --reinstall` |
+| 更新后仍是旧候选构建 | 完全退出应用，确认下载的是当前测试版，再运行上述 apt 安装命令并重新打开 |
 | AppImage 提示缺少 FUSE | 按 Ubuntu 版本安装 FUSE 2 库，或改用 `.deb` |
 | 音乐无法播放 | 确认已安装 mpv，检查输出设备及歌曲权限；最低基线为 mpv 0.34.1 |
 | 频谱不可用 | 检查 `pactl`、`parec`、音频兼容服务及输出后端；原生 PipeWire 还需 `pw-dump` |
