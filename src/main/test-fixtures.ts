@@ -55,7 +55,7 @@ export function createFixtureApi(audioUrl = '', qrScenario = ''): ApiModule {
     },
     lyric: p => String(p.id)==='1005'&&lyricFailures++===0?response({code:403,message:'测试歌词暂不可用'}):String(p.id)==='1006'?response({lrc:{lyric:'没有时间轴的第一句\n没有时间轴的第二句'}}):response({ tlyric:{lyric:'[00:05.00]译文测试行'}, lrc: { lyric: '[00:00.00]晚风轻轻经过\n[00:05.00]音乐在这里停留\n[00:10.00]一起听见生活'+Array.from({length:40},(_,i)=>`\n[01:${String(i).padStart(2,'0')}.00]测试歌词第 ${i+1} 行`).join('') } }),
     personal_fm: () => response({ data: songs }), personal_fm_mode: () => response({ data: songs }), fm_trash: () => response({}), scrobble: () => response({}),
-    song_url_v1: p => response({ data: [{ id: p.id, url: audioUrl, level: p.level, br: 320000, type: 'wav' }] }),
+    song_url_v1: p => response({ data: [{ id: p.id, url: audioUrl, level: String(p.id)==='1004'&&p.level==='hires'?'standard':p.level, br: 320000, type: 'wav' }] }),
     song_download_url_v1: p => response({ data: { id: p.id, url: audioUrl, level: p.level, br: 320000, type: 'wav' } })
   }
   return api

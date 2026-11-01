@@ -58,6 +58,15 @@ describe('player state transitions', () => {
     await player.quality('lossless'); mpv.emit('event', { event: 'file-loaded' }); await flush()
     expect(mpv.commands).toContainEqual(['seek', 23, 'absolute+exact']); expect(player.state.status).toBe('paused')
   })
+  it('keeps downgraded quality in audio metadata without a duplicate notice and preserves trial warnings',async()=>{
+    const mpv=new FakeMpv(),backend={call:vi.fn(async()=>({url:'https://example.com/audio',quality:'standard',bitrate:128000,trial:false}))}
+    const player=new Player(mpv as unknown as Mpv,backend as any,{...settings,quality:'lossless'},()=>{},()=>{},()=>{})
+    await player.play([track(1)])
+    expect(player.state.actualQuality).toBe('standard');expect(player.state.bitrate).toBe(128000);expect(player.state.requestedQuality).toBe('lossless');expect(player.state.notice).toBeNull()
+    backend.call.mockResolvedValue({url:'https://example.com/audio',quality:'standard',bitrate:128000,trial:true})
+    await player.play([track(2)])
+    expect(player.state.trial).toBe(true);expect(player.state.notice).toContain('试听片段')
+  })
   it('pauses on a disconnected pinned device and exposes a useful notice', async () => {
     const mpv = new FakeMpv(), player = new Player(mpv as unknown as Mpv, { call: async () => ({}) } as any, { ...settings, deviceId: 'pulse/headphones' }, () => {}, () => {}, () => {})
     player.restore({ queue: [track(1)], index: 0, position: 10, repeat: 'list' })

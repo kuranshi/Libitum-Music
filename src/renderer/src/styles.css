@@ -150,3 +150,26 @@
 .mini-seek{appearance:none;height:6px;background:transparent}
 .mini-seek::-webkit-slider-runnable-track{height:2px;border-radius:2px;background:color-mix(in srgb,var(--text) 22%,transparent)}
 .mini-seek::-webkit-slider-thumb{appearance:none;width:6px;height:6px;margin-top:-2px;border-radius:50%;background:var(--accent)}
+
+/* App-drawn title bar shares the wallpaper; controls keep their own contrast. */
+.app-shell{--titlebar-height:36px;grid-template-rows:var(--titlebar-height) minmax(0,1fr) var(--player-height)}
+.app-shell>.sidebar{grid-row:2;grid-column:1}
+.app-shell>.main-shell{grid-row:2;grid-column:2}
+.app-shell>.playback-bar{grid-row:3}
+.app-titlebar{width:100vw;grid-column:1/-1;grid-row:1;position:relative;z-index:55;height:var(--titlebar-height);display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--text);user-select:none;-webkit-app-region:drag}
+.has-wallpaper .app-titlebar{background:transparent;backdrop-filter:blur(var(--panel-blur,12px))}
+.window-title{font-size:11px;line-height:1;max-width:calc(100% - 240px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.window-title strong{font-weight:650}
+.is-inactive .window-title{opacity:.75}
+.window-controls{position:absolute;right:8px;top:4px;display:flex;gap:5px;-webkit-app-region:no-drag}
+.window-button{transition:none;width:30px;height:28px;display:flex;align-items:center;justify-content:center;border:1px solid #00000014;border-radius:8px;background:#f5f6f8f5;color:#252a35;box-shadow:0 1px 3px #00000014;-webkit-app-region:no-drag}
+.window-button:hover{background:#e1e4ea;color:#171c27}
+.window-button:focus-visible{outline:2px solid currentColor;outline-offset:1px}
+.window-button.window-close:hover,.window-button.window-close:active{background:#b42335;color:#fff;border-color:#b42335}
+:root[data-theme=dark] .window-button{background:#262b35f5;color:#f5f7fc;border-color:#ffffff20}
+:root[data-theme=dark] .window-button:hover{background:#3b424f;color:#fff}
+@media(prefers-color-scheme:dark){:root[data-theme=system] .window-button{background:#262b35f5;color:#f5f7fc;border-color:#ffffff20}:root[data-theme=system] .window-button:hover{background:#3b424f;color:#fff}}
+:root:is([data-theme=dark],[data-theme=system]) .window-button.window-close:hover,:root:is([data-theme=dark],[data-theme=system]) .window-button.window-close:active{background:#b42335;color:#fff;border-color:#b42335}
+.app-shell>.playback-panel{top:calc(var(--titlebar-height) + 83px)}
+.app-shell>.modal-backdrop{top:var(--titlebar-height)}
+.app-shell .modal{max-height:calc(100vh - var(--titlebar-height) - 60px)}

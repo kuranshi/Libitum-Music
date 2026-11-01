@@ -236,6 +236,7 @@ test('logging back into the same QQ account restores only its own downloads, the
   await page.getByRole('button', { name: '账号与隐私', exact: true }).click()
   await expect(page.getByText('当前平台：QQ音乐', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '退出登录', exact: true }).click()
+  await expect(page.getByRole('button', { name: '登录音乐账号 同步你的专属音乐库', exact: true })).toBeVisible()
   const guest = await invoke('app.bootstrap')
   expect(guest.session.user).toBeNull()
   expect(guest.session.provider || 'netease').toBe('netease')
