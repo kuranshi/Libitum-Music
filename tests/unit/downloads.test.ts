@@ -83,6 +83,24 @@ describe('download lifecycle', () => {
     expect(resolver).toHaveBeenCalledTimes(3)
     expect((await readdir(directory)).some(name => name.endsWith('.part'))).toBe(false)
   })
+  it('shares the two-job limit across platforms and disables only one owner without losing its records', async () => {
+    const releases = new Map<string, () => void>()
+    const resolver = vi.fn((track: Track) => new Promise<Stream>(resolve => releases.set(`${track.provider}:${track.id}`, () => resolve(stream(`${track.provider}-${track.id}`)))))
+    const dm = await create(resolver)
+    dm.setOwners(['netease:42', 'qq:42'])
+    dm.add([song(1), { ...song(1), provider: 'qq' }, { ...song(2), provider: 'qq' }], 'exhigh')
+    expect(resolver).toHaveBeenCalledTimes(2)
+    dm.setOwners(['qq:42'])
+    expect(resolver).toHaveBeenCalledTimes(3)
+    expect(dm.list().map(task => task.track.provider)).toEqual(['qq', 'qq'])
+    for (const release of releases.values()) release()
+    await vi.waitFor(() => expect(dm.list().every(task => task.status === 'completed')).toBe(true))
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch).not.toHaveBeenCalledWith('https://example.com/netease-1', expect.anything())
+    dm.setOwners(['netease:42', 'qq:42'])
+    expect(dm.list().find(task => task.track.provider === 'netease')?.status).toBe('interrupted')
+    expect(dm.list()).toHaveLength(3)
+  })
   it('aborts an active transfer and removes partial audio when the owner changes', async () => {
     let aborted = false
     vi.stubGlobal('fetch', vi.fn(async (_url, options) => new Response(new ReadableStream<Uint8Array>({

@@ -1,4 +1,5 @@
-import type { DownloadTask, PeqSettings, PlayerState, Quality, RadioSpec, Settings, Stream, Track } from '../shared/types'
+import { trackKey } from '../shared/platforms'
+import type { DownloadTask, ProviderId, PeqSettings, PlayerState, Quality, RadioSpec, Settings, Stream, Track } from '../shared/types'
 import { resolveDevices } from './devices'
 import { defaultPeq, peqGraph, validPeq } from '../shared/peq'
 import { MusicError } from '../shared/errors'
@@ -40,7 +41,7 @@ export class Player {
   snapshot(): PlayerState { return structuredClone(this.state) }
   saved(): SavedQueue { return { queue: this.state.queue, index: this.state.index, position: this.state.position, repeat: this.state.repeat } }
   restore(value: SavedQueue) {
-    if (!Array.isArray(value.queue) || value.queue.some(track => track.provider !== value.queue[0]?.provider)) {
+    if (!Array.isArray(value.queue)) {
       this.state.queue = []; this.state.index = -1; this.state.position = 0; this.state.duration = 0; this.state.status = 'idle'
       return
     }
@@ -134,9 +135,8 @@ export class Player {
   private assertDevice() { if (!this.state.devices.some(device => device.id === this.state.deviceId)) throw new MusicError('DEVICE_MISSING', '请选择可用的输出设备。') }
   async play(tracks: Track[], index = 0, append = false) {
     if (!tracks.length) throw new MusicError('EMPTY', '没有可播放的歌曲。')
-    const provider = tracks[0].provider
-    if (tracks.some(track => track.provider !== provider) || append && this.state.queue.some(track => track.provider !== provider)) throw new MusicError('PLATFORM_MISMATCH', '请在当前音乐平台内选择歌曲，切换平台后重新打开歌单。')
     if (append) {
+      this.state.radio = null; this.radioRequest++; this.radioLoading = null
       this.state.queue.push(...tracks)
       this.state.queue = this.state.queue.slice(0, 10000)
       if (this.state.index < 0) { this.state.index = 0; this.state.status = 'paused' }
@@ -181,13 +181,13 @@ export class Player {
       if (generation !== this.generation) return
       this.loading = null
       const problem = error instanceof MusicError ? error : new MusicError('PLAYBACK', '无法播放这首歌曲。')
-      if (['UNAVAILABLE', 'UPSTREAM'].includes(problem.code)) { await this.skipFailed(track.id, problem.message); return }
+      if (['UNAVAILABLE', 'UPSTREAM'].includes(problem.code)) { await this.skipFailed(trackKey(track), problem.message); return }
       this.state.status = 'error'; this.state.error = problem.message; this.changed(true)
     }
   }
   private async skipFailed(id: string, message: string) {
     this.failedIds.add(id)
-    const candidate = this.state.queue.findIndex((track, index) => index > this.state.index && !this.failedIds.has(track.id))
+    const candidate = this.state.queue.findIndex((track, index) => index > this.state.index && !this.failedIds.has(trackKey(track)))
     if (candidate >= 0 && this.failedIds.size < 5) { this.state.notice = message; this.changed(); await this.load(candidate); return }
     this.state.status = 'error'; this.state.error = `连续歌曲无法播放，已停止。${message}`; this.changed(true)
   }
@@ -218,8 +218,8 @@ export class Player {
       if (event.reason === 'eof') { this.report(); this.loaded = false; await this.next(true) }
       if (event.reason === 'error' && this.current()) {
         const track = this.current()!
-        if (!this.refreshed.has(track.id) && !this.local) { this.refreshed.add(track.id); await this.load(this.state.index, this.state.position) }
-        else await this.skipFailed(track.id, '音频加载失败，请检查网络或账号权限。')
+        if (!this.refreshed.has(trackKey(track)) && !this.local) { this.refreshed.add(trackKey(track)); await this.load(this.state.index, this.state.position) }
+        else await this.skipFailed(trackKey(track), '音频加载失败，请检查网络或账号权限。')
       }
     }
   }
@@ -263,7 +263,7 @@ export class Player {
     if (this.state.position > 3) { await this.seek(0); return }
     this.report(); await this.load((this.state.index - 1 + this.state.queue.length) % this.state.queue.length)
   }
-  async radio(spec: RadioSpec) {
+  async radio(spec: RadioSpec & { provider: ProviderId }) {
     const generation = this.generation, request = ++this.radioRequest
     const tracks = await this.backend.call<Track[]>('radio', spec)
     if (generation !== this.generation || request !== this.radioRequest) return
@@ -312,6 +312,20 @@ export class Player {
     const track = this.current(), seconds = this.listened
     this.listened = 0
     if (track && seconds >= 10 && !this.local) void this.backend.call('scrobble', { id: track.id, provider: track.provider, seconds }).catch(() => {})
+  }
+  async removeProvider(provider: ProviderId, report = true) {
+    const current = this.current()
+    if (!this.state.queue.some(track => track.provider === provider)) return
+    const remaining = this.state.queue.filter(track => track.provider !== provider)
+    if (current?.provider === provider) {
+      if (report) this.report(); else this.listened = 0
+      this.state.queue = remaining
+      await this.stop(false)
+    } else {
+      this.state.queue = remaining
+      this.state.index = current ? remaining.indexOf(current) : -1
+      this.changed(true)
+    }
   }
   /** Clear account-bound playback synchronously before awaiting the mpv stop. */
   reset() { return this.stop(true) }

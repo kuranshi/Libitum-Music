@@ -1,7 +1,7 @@
 import { MusicError } from '../shared/errors'
 import { QUALITIES, type Command, type Track } from '../shared/types'
 import { validPeq } from '../shared/peq'
-import { isProvider } from '../shared/platforms'
+import { isProvider, PLATFORM_PAGES } from '../shared/platforms'
 const commands = new Set<Command>(['app.bootstrap', 'auth.qrStart', 'auth.qrCheck', 'auth.qrCancel', 'auth.importCookie', 'auth.logout', 'catalog.search', 'catalog.detail', 'catalog.allTracks', 'catalog.lyrics', 'catalog.artistAlbums', 'catalog.comments', 'home.section', 'library.list', 'library.like', 'library.subscribe', 'library.subscription', 'library.writablePlaylists', 'library.addToPlaylist', 'library.diagnostics', 'player.play', 'player.toggle', 'player.next', 'player.previous', 'player.seek', 'player.volume', 'player.repeat', 'player.quality', 'player.device', 'player.refreshDevices', 'player.remove', 'player.radio', 'player.dislike', 'downloads.add', 'downloads.cancel', 'downloads.retry', 'downloads.reveal', 'downloads.play', 'settings.fonts', 'settings.update', 'settings.pickDirectory', 'peq.apply', 'peq.import', 'wallpaper.import', 'wallpaper.cancel', 'wallpaper.clear', 'spectrum.subscribe', 'mini.bootstrap', 'mini.like', 'mini.close', 'window.state', 'window.minimize', 'window.toggleMaximize', 'window.close', 'window.restore', 'app.quit', 'app.openExternal'])
 function assert(value: unknown): asserts value { if (!value) throw new MusicError('INVALID_ARGUMENT', '操作参数无效，请刷新后重试。') }
 commands.add('auth.cancel')
@@ -14,11 +14,10 @@ export function isTrack(v: any): v is Track {
 }
 export function validateCommand(command: unknown, args: any): asserts command is Command {
   assert(typeof command === 'string' && commands.has(command as Command))
-  if (command === 'auth.cancel') { assert(args === undefined || args === null); return }
-  if (command === 'auth.qrStart') { assert(args === undefined || args === null || typeof args === 'object' && !Array.isArray(args) && (args.provider === undefined || isProvider(args.provider))); return }
-  const noArgs = ['app.bootstrap', 'auth.logout', 'player.toggle', 'player.next', 'player.previous', 'player.refreshDevices', 'player.dislike', 'settings.pickDirectory', 'settings.fonts', 'peq.import', 'wallpaper.import', 'wallpaper.cancel', 'wallpaper.clear', 'mini.bootstrap', 'mini.like', 'mini.close', 'window.state', 'window.minimize', 'window.toggleMaximize', 'window.close', 'window.restore', 'app.quit', 'library.diagnostics']
+  const noArgs = ['app.bootstrap', 'player.toggle', 'player.next', 'player.previous', 'player.refreshDevices', 'player.dislike', 'settings.pickDirectory', 'settings.fonts', 'peq.import', 'wallpaper.import', 'wallpaper.cancel', 'wallpaper.clear', 'mini.bootstrap', 'mini.like', 'mini.close', 'window.state', 'window.minimize', 'window.toggleMaximize', 'window.close', 'window.restore', 'app.quit']
   if (noArgs.includes(command)) { assert(args === undefined || args === null); return }
   assert(args && typeof args === 'object' && !Array.isArray(args))
+  if (/^(?:auth\.|catalog\.|home\.|library\.)/.test(command) || command === 'player.radio') assert(isProvider(args.provider))
   if (['catalog.detail', 'catalog.allTracks', 'catalog.lyrics', 'catalog.comments', 'catalog.artistAlbums', 'library.like', 'library.subscribe', 'library.subscription', 'library.addToPlaylist'].includes(command)) assert(id(args.id))
   if (['catalog.search', 'catalog.detail', 'catalog.comments', 'catalog.artistAlbums', 'library.list', 'library.writablePlaylists'].includes(command)) assert(Number.isInteger(args.offset) && finite(args.offset, 0, 1000000))
   switch (command) {
@@ -51,7 +50,9 @@ export function validateCommand(command: unknown, args: any): asserts command is
     case 'player.radio': assert(['FM', 'DEFAULT', 'FAMILIAR', 'EXPLORE', 'SCENE_RCMD'].includes(args.mode)); if (args.mode === 'SCENE_RCMD') assert(typeof args.scene === 'string' && /^[A-Z_]{2,40}$/.test(args.scene)); break
     case 'downloads.cancel': case 'downloads.retry': case 'downloads.reveal': case 'downloads.play': assert(text(args.id, 100)); if (args.quality !== undefined) assert(quality(args.quality)); break
     case 'settings.update':
-      assert(Object.keys(args).every(key => ['downloadQuality', 'theme', 'mpvPath', 'commentsEnabled', 'autoWallpaperText', 'backgroundColor', 'fontColor', 'fontFamily', 'rotateCover', 'visualMode', 'wallpaperScope', 'wallpaperBrightness', 'wallpaperOverlay', 'wallpaperBlur', 'panelBlur', 'panelOpacity', 'floatingOpacity', 'floatingEnabled', 'spectrum'].includes(key)))
+      assert(Object.keys(args).every(key => ['enabledProviders', 'pageProviders', 'downloadQuality', 'theme', 'mpvPath', 'commentsEnabled', 'autoWallpaperText', 'backgroundColor', 'fontColor', 'fontFamily', 'rotateCover', 'visualMode', 'wallpaperScope', 'wallpaperBrightness', 'wallpaperOverlay', 'wallpaperBlur', 'panelBlur', 'panelOpacity', 'floatingOpacity', 'floatingEnabled', 'spectrum'].includes(key)))
+      if (args.enabledProviders !== undefined) assert(Array.isArray(args.enabledProviders) && args.enabledProviders.length >= 1 && args.enabledProviders.length <= 2 && args.enabledProviders.every(isProvider) && new Set(args.enabledProviders).size === args.enabledProviders.length)
+      if (args.pageProviders !== undefined) assert(args.pageProviders && typeof args.pageProviders === 'object' && !Array.isArray(args.pageProviders) && Object.keys(args.pageProviders).length === PLATFORM_PAGES.length && PLATFORM_PAGES.every(page => isProvider(args.pageProviders[page])))
       if (args.downloadQuality !== undefined) assert(quality(args.downloadQuality))
       for(const key of ['backgroundColor','fontColor']) if(args[key]!==undefined) assert(typeof args[key]==='string'&&(args[key]===''||/^#[a-f0-9]{6}$/i.test(args[key])))
       if(args.fontFamily!==undefined) assert(typeof args.fontFamily==='string'&&args.fontFamily.length<=120&&/^[\p{L}\p{N} .,_'-]*$/u.test(args.fontFamily))

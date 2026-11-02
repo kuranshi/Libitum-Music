@@ -19,6 +19,13 @@ async function main() {
     if(titlebarHeight!==36)throw new Error('Packaged titlebar height mismatch')
     const windowState=await page.evaluate(()=>window.music.invoke('window.state'))
     if(!windowState.ok||typeof windowState.data.maximized!=='boolean')throw new Error('Packaged window state unavailable')
+    const emptyPlatforms=await page.evaluate(()=>window.music.invoke('settings.update',{enabledProviders:[]}))
+    if(emptyPlatforms.ok)throw new Error('Packaged app accepted zero platforms')
+    const dual=await page.evaluate(()=>window.music.invoke('settings.update',{enabledProviders:['netease','qq']}))
+    if(!dual.ok)throw new Error('Packaged dual-platform setup failed')
+    await page.getByRole('tablist',{name:'音乐平台'}).waitFor()
+    await page.getByRole('tab',{name:'QQ音乐',exact:true}).click()
+    await page.getByRole('tab',{name:'QQ音乐',exact:true,selected:true}).waitFor()
     const opening=instance.waitForEvent('window')
     const enabled=await page.evaluate(()=>window.music.invoke('settings.update',{floatingEnabled:true,floatingOpacity:.5}))
     if(!enabled.ok)throw new Error('Packaged card did not enable')
@@ -29,11 +36,11 @@ async function main() {
     const mainControl=await card.evaluate(()=>window.music.invoke('window.close'));if(mainControl.ok)throw new Error('Packaged window control leak')
     const privateAccess=await card.evaluate(()=>window.music.invoke('app.bootstrap'))
     if(privateAccess.ok)throw new Error('Packaged card capability leak')
-    const report = { titlebarHeight,cardSize,cardBackgroundOpacity:.5,restrictedIPC:true,version: await instance.evaluate(({ app }) => app.getVersion()), packaged, playerAvailable: result.data.player.available, devices: result.data.player.devices.length, fixtureDisabled: result.data.session.user === null }
+    const report = { titlebarHeight,cardSize,cardBackgroundOpacity:.5,restrictedIPC:true,dualPlatformSelector:true,zeroPlatformsRejected:true,version: await instance.evaluate(({ app }) => app.getVersion()), packaged, playerAvailable: result.data.player.available, devices: result.data.player.devices.length, fixtureDisabled: Object.values(result.data.sessions).every(session=>session.user===null) }
     if (process.argv.includes('--network')) {
-      const home = await page.evaluate(() => window.music.invoke('home.section', { section: 'recommended' }))
+      const home = await page.evaluate(() => window.music.invoke('home.section', { provider: 'netease', section: 'recommended' }))
       if (!home.ok || !home.data.collections.length) throw new Error('Packaged public homepage failed')
-      const detail = await page.evaluate(id => window.music.invoke('catalog.detail', { kind: 'playlist', id, offset: 0 }), home.data.collections[0].id)
+      const detail = await page.evaluate(id => window.music.invoke('catalog.detail', { provider: 'netease', kind: 'playlist', id, offset: 0 }), home.data.collections[0].id)
       if (!detail.ok || !detail.data.tracks.length) throw new Error('Packaged public playlist failed')
       report.homeCollections = home.data.collections.length; report.playlistTracks = detail.data.tracks.length
     }
@@ -44,8 +51,8 @@ async function main() {
         const status = await page.evaluate(key => window.music.invoke('auth.qrCheck', { provider: 'qq', key }), qr.data.key)
         if (!status.ok || status.data.state !== 'waiting') throw new Error('Packaged QQ QR waiting state failed')
         const current = await page.evaluate(() => window.music.invoke('app.bootstrap'))
-        if (!current.ok || current.data.session.user || current.data.session.provider !== 'netease') throw new Error('A pending QQ login changed the active platform')
-        report.qqQrWaiting = true; report.anonymousPlatform = current.data.session.provider
+        if (!current.ok || Object.values(current.data.sessions).some(session=>session.user)) throw new Error('A pending QQ login changed the active platform')
+        report.qqQrWaiting = true; report.anonymousPlatform = current.data.sessions.netease.provider
       } finally { await page.evaluate(key => window.music.invoke('auth.qrCancel', { provider: 'qq', key }), qr.data.key) }
     }
     console.log(JSON.stringify(report))

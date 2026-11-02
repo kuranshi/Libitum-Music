@@ -1,8 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
-import { handleRequest } from '@yakult-green-tea/qq-music-api/serverless'
-import { createMqttListenOver, type MqttConnect, type QrEvent, type QrEventListener } from '@yakult-green-tea/qq-music-api/mqtt'
 import { JsonStore } from './store'
+import { createQqSessionResolver, qqCore } from './qqmusic-core'
 
 export interface QqMusicRequest {
   query?: Record<string, string | number | boolean>
@@ -16,13 +15,14 @@ export interface QqMusicTransport {
   close?(): void
 }
 
-/** The library's public request handler runs inside the worker: no listening HTTP server. */
+/** One native service keeps the QR bootstrap and authenticated device together. */
 export async function createQqMusicRuntime(userData: string): Promise<QqMusicTransport> {
   const store = new JsonStore<{ seed: string } | null>(join(userData, 'qqmusic-device.json'), null)
   const saved = await store.read()
   const seed = saved && /^[a-f0-9]{64}$/.test(saved.seed) ? saved.seed : randomBytes(32).toString('hex')
   if (!saved || seed !== saved.seed) await store.write({ seed })
-  const connect: MqttConnect = (url, protocol, handlers) => new Promise((resolve, reject) => {
+  const listeners = new Set<{ close(): void }>()
+  const connect = (url: string, protocol: string, handlers: any) => new Promise((resolve, reject) => {
     const socket = new WebSocket(url, protocol)
     socket.binaryType = 'arraybuffer'
     let opened = false
@@ -33,41 +33,41 @@ export async function createQqMusicRuntime(userData: string): Promise<QqMusicTra
     socket.addEventListener('open', () => {
       opened = true
       clearTimeout(timeout)
-      resolve({ send: data => socket.send(Uint8Array.from(data)), close: () => socket.close() })
+      resolve({ send: (data: Uint8Array) => socket.send(Uint8Array.from(data)), close: () => socket.close() })
     }, { once: true })
   })
-  const listen = createMqttListenOver(connect)
-  const entries = new Map<string, { image: string; events: QrEvent[]; listener: QrEventListener; timer: ReturnType<typeof setTimeout> }>()
-  const close = async (id: string) => {
-    const entry = entries.get(id)
-    if (entry) { clearTimeout(entry.timer); entry.listener.close(); entries.delete(id) }
-  }
-  const relay = {
-    open: async (id: string, image: string, ttl: number) => {
-      const existing = entries.get(id)
-      if (existing) { await existing.listener.ready; return }
-      const events: QrEvent[] = []
-      const listener = listen(id, event => { events.push(event) }, ttl)
-      const timer = setTimeout(() => { void close(id) }, Math.min(ttl + 5000, 300000)); timer.unref()
-      entries.set(id, { image, events, listener, timer })
-      void listener.done.catch(() => { events.push({ type: 'expired', payload: null }) })
-      try { await listener.ready } catch (error) { await close(id); throw error }
-    },
-    image: async (id: string) => entries.get(id)?.image || '',
-    // Preserve the complete event list: the public handler replays QR state each call.
-    poll: async (id: string, _budgetMs: number) => entries.get(id)?.events.slice() || [],
-    close
-  }
+  const listen = qqCore.createMqttListenOver(connect)
+  const service = qqCore.createQrLoginService({
+    http: qqCore.createFetchAuthHttpClient(),
+    createSessionHttp: () => qqCore.createFetchAuthHttpClient(),
+    deviceRepository: qqCore.createMemoryDeviceContextRepository(await qqCore.deriveAndroidDevice(seed)),
+    sessionResolver: createQqSessionResolver(seed),
+    listen: (...args: any[]) => {
+      const listener = listen(...args)
+      listeners.add(listener)
+      void listener.done.catch(() => {}).finally(() => listeners.delete(listener))
+      return listener
+    }
+  })
+  qqCore.setLegacyHttpTransport(qqCore.createFetchLegacyTransport())
+  const match = qqCore.createRouter(Object.fromEntries(qqCore.sharedRoutes.map((route: any) => [qqCore.serverlessPathOf(route), route.handler])))
+  let closed = false
   return {
     async request(path, options = {}) {
       const url = new URL(path, 'https://libitum-qq.invalid')
       for (const [key, value] of Object.entries(options.query || {})) url.searchParams.set(key, String(value))
-      const headers = new Headers()
-      if (options.token) headers.set('X-QQ-Session', options.token)
-      if (options.body !== undefined) headers.set('Content-Type', 'application/json')
-      const response = await handleRequest(new Request(url, { method: options.method || 'GET', headers, ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}) }), { QQ_SESSION_SECRET: seed, QQ_PTLOGIN_HTTP_ENABLED: '0' }, { qqRelay: relay })
-      return { status: response.status, body: await response.json() as Record<string, any>, cookie: response.headers.get('set-cookie') || undefined }
+      if (closed) throw new Error('QQ runtime is closed')
+      const route = match(url.pathname)
+      if (!route) return { status: 501, body: { code: 501 } }
+      try {
+        const query = (name: string) => url.searchParams.get(name) ?? undefined
+        const result = await route.handler({ runtime: 'node', method: options.method || 'GET', body: async () => options.body, query, queryRaw: query, params: route.params, token: options.token, sessionConfigured: true, service: async () => service, capabilities: service.getCapabilities() })
+        return { status: result.status, body: result.body, cookie: result.headers['set-cookie'] }
+      } catch (error) {
+        const response = qqCore.failureResponse(error)
+        return { status: response.status, body: await response.json() }
+      }
     },
-    close() { for (const id of entries.keys()) void close(id) }
+    close() { closed = true; for (const listener of listeners) listener.close(); listeners.clear() }
   }
 }

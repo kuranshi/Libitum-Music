@@ -26,7 +26,7 @@ export function audioExtension(format: string, contentType: string): string {
 }
 export class Downloads {
   private tasks: DownloadTask[] = []
-  private ownerId = ''
+  private owners = new Set<string>()
   private active = new Map<string, AbortController>()
   private directory = ''
   private lastUpdate = 0
@@ -42,32 +42,34 @@ export class Downloads {
     }) : []
   }
   configure(directory: string) { this.directory = directory }
-  setOwner(id: string) {
-    const next = id && !id.includes(':') ? `netease:${id}` : id
-    if (next !== this.ownerId) {
-      for (const task of this.tasks.filter(task => task.ownerId === this.ownerId && ['queued', 'resolving', 'downloading'].includes(task.status))) {
-        task.status = 'interrupted'; task.error = '账号已切换，下载已中断；返回原账号后可重试。'
+  setOwner(id: string) { this.setOwners(id ? [id.includes(':') ? id : `netease:${id}`] : []) }
+  setOwners(ids: string[]) {
+    const next = new Set(ids)
+    for (const task of this.tasks) {
+      if (this.owners.has(task.ownerId) && !next.has(task.ownerId) && ['queued', 'resolving', 'downloading'].includes(task.status)) {
+        task.status = 'interrupted'; task.error = '平台已关闭或账号已变更，重新开启并登录原账号后可重试。'
         this.active.get(task.id)?.abort(new MusicError('SESSION_CHANGED', task.error)); this.active.delete(task.id)
       }
-      this.ownerId = next
     }
+    this.owners = next
     this.publish(); this.pump()
   }
-  list() { return structuredClone(this.tasks.filter(task => task.ownerId === this.ownerId)) }
+  list() { return structuredClone(this.tasks.filter(task => this.owners.has(task.ownerId))) }
   private publish(persist = true) {
     this.emit(this.list())
     if (persist && !this.saving && !this.closing) this.saving = setTimeout(() => { this.saving = null; void this.store.write(this.tasks).catch(() => this.report('下载记录保存失败，请检查磁盘空间。')) }, 250)
   }
   add(tracks: Track[], quality: Quality) {
-    if (!this.ownerId) throw new MusicError('AUTH_REQUIRED', '请先登录后下载。')
-    if (tracks.some(track => !this.ownerId.startsWith(`${track.provider}:`))) throw new MusicError('PLATFORM_MISMATCH', '歌曲不属于当前登录的音乐平台，请重新打开歌单。')
+    if (!this.owners.size) throw new MusicError('AUTH_REQUIRED', '请先登录后下载。')
+    if (tracks.some(track => ![...this.owners].some(owner => owner.startsWith(`${track.provider}:`)))) throw new MusicError('PLATFORM_MISMATCH', '歌曲不属于当前登录的音乐平台，请重新打开歌单。')
     for (const track of tracks) {
-      if (this.tasks.some(task => task.ownerId === this.ownerId && task.track.provider === track.provider && task.track.id === track.id && task.quality === quality && ['queued', 'resolving', 'downloading', 'completed'].includes(task.status))) continue
-      this.tasks.push({ id: randomUUID(), ownerId: this.ownerId, track, quality, status: 'queued', received: 0, total: 0, createdAt: Date.now() })
+      const ownerId = [...this.owners].find(owner => owner.startsWith(`${track.provider}:`))!
+      if (this.tasks.some(task => task.ownerId === ownerId && task.track.provider === track.provider && task.track.id === track.id && task.quality === quality && ['queued', 'resolving', 'downloading', 'completed'].includes(task.status))) continue
+      this.tasks.push({ id: randomUUID(), ownerId, track, quality, status: 'queued', received: 0, total: 0, createdAt: Date.now() })
     }
     this.publish(); this.pump()
   }
-  get(id: string) { const task = this.tasks.find(task => task.id === id && task.ownerId === this.ownerId); if (!task) throw new MusicError('NOT_FOUND', '下载任务不存在。'); return task }
+  get(id: string) { const task = this.tasks.find(task => task.id === id && this.owners.has(task.ownerId)); if (!task) throw new MusicError('NOT_FOUND', '下载任务不存在。'); return task }
   cancel(id: string) {
     const task = this.get(id)
     if (task.status === 'completed') return
@@ -81,22 +83,22 @@ export class Downloads {
     this.publish(); this.pump()
   }
   async clearOwner() {
-    const owner = this.ownerId
-    this.setOwner('')
-    this.tasks = this.tasks.filter(task => task.ownerId !== owner)
+    const owners = new Set(this.owners)
+    this.setOwners([])
+    this.tasks = this.tasks.filter(task => !owners.has(task.ownerId))
     this.publish(); await this.store.write(this.tasks)
   }
   private pump() {
-    if (!this.ownerId || this.closing) return
+    if (!this.owners.size || this.closing) return
     for (const task of this.tasks) {
       if (this.active.size >= 2) break
-      if (task.ownerId !== this.ownerId || task.status !== 'queued') continue
+      if (!this.owners.has(task.ownerId) || task.status !== 'queued') continue
       const controller = new AbortController()
       this.active.set(task.id, controller); task.status = 'resolving'
       void this.run(task, controller).finally(() => { if (this.active.get(task.id) === controller) this.active.delete(task.id); this.publish(); this.pump() })
     }
   }
-  private current(task: DownloadTask, controller: AbortController) { return !controller.signal.aborted && task.ownerId === this.ownerId && this.active.get(task.id) === controller && this.tasks.includes(task) }
+  private current(task: DownloadTask, controller: AbortController) { return !controller.signal.aborted && this.owners.has(task.ownerId) && this.active.get(task.id) === controller && this.tasks.includes(task) }
   private async run(task: DownloadTask, controller: AbortController) {
     let temporary = ''
     const directory = this.directory

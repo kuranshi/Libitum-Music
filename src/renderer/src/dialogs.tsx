@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowDownToLine, CheckCircle2, FolderOpen, LoaderCircle, QrCode, RefreshCw, ShieldCheck } from 'lucide-react'
 import type { ProviderId, Quality } from '../../shared/types'
-import { PROVIDERS, sessionProvider } from '../../shared/platforms'
+import { PROVIDERS } from '../../shared/platforms'
 import { Busy, ErrorState, Modal, QualitySelect } from './components'
 import { request, useApp } from './state'
 import { QR_POLL_INTERVAL_MS, qrRetryDelay, transientLoginError } from '../../shared/login'
 
 export function LoginDialog() {
-  const { data, setLoginOpen, toast, act } = useApp()
-  const [provider, setProvider] = useState<ProviderId>(() => sessionProvider(data.session))
+  const { loginProvider: provider, setLoginOpen, toast, act } = useApp()
   const providerName = PROVIDERS[provider]
   const [tab, setTab] = useState<'qr' | 'cookie'>('qr'), [cookie, setCookie] = useState(''), [saving, setSaving] = useState(false)
   const [qr, setQr] = useState(''), [status, setStatus] = useState('loading'), [error, setError] = useState(''), [errorCode, setErrorCode] = useState(''), [retrying, setRetrying] = useState(false), [revision, setRevision] = useState(0)
   const resume = useRef<(() => void) | null>(null), version = useRef(0)
-  useEffect(() => () => { version.current++; void request('auth.cancel').catch(() => {}) }, [])
+  useEffect(() => () => { version.current++; void request('auth.cancel', { provider }).catch(() => {}) }, [])
   useEffect(() => {
     const requestVersion = ++version.current
     let alive = true, timer: ReturnType<typeof setTimeout> | undefined, key = '', failures = 0, inFlight = false
@@ -61,10 +60,6 @@ export function LoginDialog() {
       if (key) void request('auth.qrCancel', { key, provider }).catch(() => {})
     }
   }, [provider, tab, revision])
-  const chooseProvider = (next: ProviderId) => {
-    if (saving || next === provider) return
-    version.current++; setCookie(''); setError(''); setQr(''); setStatus('loading'); setProvider(next); setTab('qr')
-  }
   const importCookie = async () => {
     const requestVersion = ++version.current
     setSaving(true); setError('')
@@ -72,8 +67,7 @@ export function LoginDialog() {
     catch (error) { if (version.current === requestVersion) setError((error as Error).message) } finally { if (version.current === requestVersion) setSaving(false) }
   }
   const retry = retrying || ['RISK_BLOCKED','RATE_LIMITED'].includes(errorCode) ? undefined : qr ? () => resume.current?.() : () => setRevision(value => value + 1)
-  return <Modal title="让音乐，更懂你" subtitle={`登录你的${providerName}账号`} close={() => { version.current++; void request('auth.cancel').catch(() => {}); setLoginOpen(false) }}>
-    <div className="tabs centered" role="tablist" aria-label="登录平台">{(['netease', 'qq'] as const).map(value => <button key={value} type="button" role="tab" aria-selected={provider === value} className={provider === value ? 'selected' : ''} disabled={saving} onClick={() => chooseProvider(value)}>{PROVIDERS[value]}</button>)}</div>
+  return <Modal title="让音乐，更懂你" subtitle={`登录你的${providerName}账号`} close={() => { version.current++; void request('auth.cancel', { provider }).catch(() => {}); setLoginOpen(false) }}>
     {provider === 'netease' && <div className="tabs centered"><button className={tab === 'qr' ? 'selected' : ''} disabled={saving} onClick={() => setTab('qr')}>扫码登录</button><button className={tab === 'cookie' ? 'selected' : ''} disabled={saving} onClick={() => setTab('cookie')}>Cookie 导入</button></div>}
     {tab === 'qr' ? <div className="qr-panel">
       {status === 'loading' ? <Busy label="正在生成二维码…"/> : qr ? <div className="qr-image"><img src={qr} alt={`${provider === 'qq' ? 'QQ音乐' : '网易云'}登录二维码`}/>

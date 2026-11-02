@@ -34,7 +34,14 @@ export function createFixtureApi(audioUrl = '', qrScenario = ''): ApiModule {
       }
       return response({ code: 404 })
     },
-    cloudsearch: p => response({ result: p.type === 1 ? { songs, songCount: songs.length } : p.type === 10 ? { albums: [album], albumCount: 1 } : p.type === 100 ? { artists: [{ id: 301, name: 'Libitum music测试歌手', musicSize: 6 }], artistCount: 1 } : { playlists: [playlist()], playlistCount: 1 } }),
+    cloudsearch: p => {
+      if (p.type === 1 && p.keywords === '双端分页验收') {
+        const paged = Array.from({ length: 65 }, (_, index) => ({ ...songs[index % songs.length], id: 2001 + index, name: `分页歌曲 ${index + 1}` }))
+        const start = Number(p.offset || 0)
+        return response({ result: { songs: paged.slice(start, start + Number(p.limit || 30)), songCount: paged.length } })
+      }
+      return response({ result: p.type === 1 ? { songs, songCount: songs.length } : p.type === 10 ? { albums: [album], albumCount: 1 } : p.type === 100 ? { artists: [{ id: 301, name: 'Libitum music测试歌手', musicSize: 6 }], artistCount: 1 } : { playlists: [playlist()], playlistCount: 1 } })
+    },
     playlist_detail: () => response({ playlist: playlist() }),
     song_detail: p => response({ songs: songs.filter(song => String(p.ids).split(',').includes(String(song.id))) }),
     album: () => response({ album, songs }),

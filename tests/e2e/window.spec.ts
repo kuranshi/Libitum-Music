@@ -42,7 +42,7 @@ test('provides a narrow draggable title bar, operable buttons and synchronized w
 })
 
 test('displays downgraded quality only beside the selector while keeping playback errors',async()=>{
-  const r=await page.evaluate(()=>window.music.invoke('catalog.search',{keywords:'晚风',kind:'song',offset:0}));if(!r.ok)throw new Error('Search fixture failed')
+  const r=await page.evaluate(()=>window.music.invoke('catalog.search',{ provider: 'netease',keywords:'晚风',kind:'song',offset:0}));if(!r.ok)throw new Error('Search fixture failed')
   await page.evaluate(()=>window.music.invoke('player.quality',{quality:'hires'}))
   await page.evaluate(tracks=>window.music.invoke('player.play',{tracks,index:3}),r.data.tracks)
   await expect(page.locator('.quality-info')).toContainText('实际：标准 · 降级')

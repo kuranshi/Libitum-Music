@@ -13,55 +13,58 @@ function providers() {
   const factory = vi.fn(async () => qq)
   return { netease, qq, factory, router: new PlatformRouter(netease, factory) }
 }
-describe('active music platform routing', () => {
-  it('defaults to NetEase and does not initialize QQ until it is needed', async () => {
-    const { router, factory, netease } = providers(), home = vi.spyOn(netease, 'home')
-    await router.run(p => p.home('recommended'))
-    expect(home).toHaveBeenCalledWith('recommended'); expect(factory).not.toHaveBeenCalled(); expect(router.active).toBe('netease')
+describe('independent platform routing', () => {
+  it('initializes only the requested platform', async () => {
+    const { router, factory, netease } = providers()
+    expect(await router.run(p => p, 'netease')).toBe(netease)
+    expect(factory).not.toHaveBeenCalled()
   })
-  it('keeps a QQ login candidate separate until login is committed', async () => {
+  it('keeps both sessions and clears only the requested one', async () => {
     const { router, netease, qq, factory } = providers()
-    expect(await router.candidate('qq')).toBe(qq)
-    expect(await router.candidate('qq')).toBe(qq); expect(factory).toHaveBeenCalledTimes(1)
-    expect(await router.run(p => p)).toBe(netease)
-    const previous = vi.spyOn(netease, 'setSession')
+    const clearNet = vi.spyOn(netease, 'setSession')
     await router.setSession('qq', 'qqmusic_session=fixture', user)
-    expect(previous).toHaveBeenCalledWith('', null); expect(await router.run(p => p)).toBe(qq)
-    await router.clear(); expect(router.active).toBe('netease'); expect(await router.run(p => p)).toBe(netease)
+    expect(clearNet).not.toHaveBeenCalled()
+    expect(await router.run(p => p, 'qq')).toBe(qq)
+    expect(await router.run(p => p, 'netease')).toBe(netease)
+    await router.clear('qq')
+    expect(clearNet).not.toHaveBeenCalled(); expect(factory).toHaveBeenCalledTimes(1)
   })
-  it('does not deliver an old catalog response after switching accounts', async () => {
+  it('discards responses from a replaced account on the same platform', async () => {
     const { router } = providers()
-    let finish!: (value: SearchResult) => void
-    const result = router.run(() => new Promise<SearchResult>(resolve => { finish = resolve }))
+    let finish!: (value: string) => void
+    const result = router.run(() => new Promise<string>(resolve => { finish = resolve }), 'netease')
     await vi.waitFor(() => expect(finish).toBeDefined())
-    await router.setSession('qq', 'qqmusic_session=fixture', user)
-    finish({ tracks: [], collections: [], total: 0 })
+    await router.setSession('netease', 'MUSIC_U=new', user)
+    finish('old')
     await expect(result).rejects.toMatchObject({ code: 'SESSION_CHANGED' })
   })
-  it('rejects a stale track before resolving it on the new platform', async () => {
-    const { router, qq } = providers(), resolve = vi.spyOn(qq, 'resolve')
-    await router.setSession('qq', 'qqmusic_session=fixture', user)
-    await expect(router.run(p => p.resolve('1001', 'standard'), 'netease')).rejects.toMatchObject({ code: 'SESSION_CHANGED' })
-    expect(resolve).not.toHaveBeenCalled()
+  it('keeps another platform request alive when QQ logs in or out', async () => {
+    const { router } = providers()
+    let finish!: (value: string) => void
+    const result = router.run(() => new Promise<string>(resolve => { finish = resolve }), 'netease')
+    await vi.waitFor(() => expect(finish).toBeDefined())
+    await router.setSession('qq', 'qqmusic_session=fixture', user); await router.clear('qq')
+    finish('netease-result'); await expect(result).resolves.toBe('netease-result')
   })
-  it('discards an old authentication error after changing platform', async () => {
+  it('does not turn a stale authentication error into a new account expiry', async () => {
     const { router } = providers()
     let fail!: (reason: Error) => void
-    const result = router.run(() => new Promise((_, reject) => { fail = reject }))
+    const result = router.run(() => new Promise((_, reject) => { fail = reject }), 'qq')
     await vi.waitFor(() => expect(fail).toBeDefined())
     await router.setSession('qq', 'qqmusic_session=fixture', user)
-    fail(new MusicError('AUTH_EXPIRED', '旧账号已经失效'))
+    fail(new MusicError('AUTH_EXPIRED', 'old'))
     await expect(result).rejects.toMatchObject({ code: 'SESSION_CHANGED' })
   })
-  it('does not commit an obsolete login whose platform is still initializing', async () => {
+  it('rejects an obsolete QQ login while preserving an independent NetEase login', async () => {
     const { netease, qq } = providers()
     let ready!: (value: NeteaseProvider) => void
     const router = new PlatformRouter(netease, () => new Promise(resolve => { ready = resolve }))
     const pending = router.setSession('qq', 'qqmusic_session=old', user)
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'SESSION_CHANGED' })
+    const replacement = router.setSession('qq', 'qqmusic_session=new', user)
     await router.setSession('netease', 'MUSIC_U=fixture', user)
-    ready(qq)
-    await expect(pending).rejects.toMatchObject({ code: 'SESSION_CHANGED' })
-    expect(router.active).toBe('netease')
+    ready(qq); await replacement; await rejected
+    expect(await router.run(p => p, 'netease')).toBe(netease)
   })
 })
 describe('platform identifiers at the IPC interface', () => {
@@ -70,7 +73,7 @@ describe('platform identifiers at the IPC interface', () => {
     const qq = { ...track, provider: 'qq', id: '003aAYrm3GE0Ac', artists: track.artists.map(artist => ({ ...artist, provider: 'qq', id: '0025NhlN2yWrP4' })) }
     expect(isTrack(qq)).toBe(true)
     expect(() => validateCommand('player.play', { tracks: [qq] })).not.toThrow()
-    expect(() => validateCommand('catalog.detail', { kind: 'artist', id: '0025NhlN2yWrP4', offset: 0 })).not.toThrow()
+    expect(() => validateCommand('catalog.detail', { provider: 'qq', kind: 'artist', id: '0025NhlN2yWrP4', offset: 0 })).not.toThrow()
     expect(isTrack({ ...qq, id: '../secrets' })).toBe(false)
     expect(isTrack({ ...qq, provider: 'unknown' })).toBe(false)
     expect(() => validateCommand('auth.qrStart', { provider: 'unknown' })).toThrow()

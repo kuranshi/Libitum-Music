@@ -3,7 +3,7 @@
 Libitum music is an independent, unofficial NetEase Cloud Music and QQ Music client.
 
 - NeteaseCloudMusicApiEnhanced: MIT, https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced — copyright the upstream contributors. Its MIT license is shipped in the installed dependency.
-- @yakult-green-tea/qq-music-api: MIT, https://github.com/yakult-green-tea/qq-music-api — an unofficial QQ Music interface. Its installed dependency retains the upstream license. This app uses the public serverless and MQTT exports locally without starting an HTTP server.
+- @yakult-green-tea/qq-music-api: MIT, https://github.com/yakult-green-tea/qq-music-api — an unofficial QQ Music interface. Its installed dependency retains the upstream license. This app reuses the pinned version's native login service, shared route handlers and MQTT transport locally without starting an HTTP server.
 - Electron: MIT, https://github.com/electron/electron — Electron and Chromium notices are included in the packaged runtime.
 - React and React DOM: MIT, https://github.com/facebook/react — copyright Meta Platforms, Inc. and affiliates.
 - Lucide icons: ISC, https://github.com/lucide-icons/lucide — copyright the Lucide contributors.

@@ -192,10 +192,17 @@ export class QqMusicProvider implements MusicProvider {
   }
   async search(keywords: string, kind: SearchKind, offset: number): Promise<SearchResult> {
     const generation = this.generation, items: Raw[] = [], skip = offset % 10
-    let total = 0, page = Math.floor(offset / 10) + 1
+    let total = 0, page = Math.floor(offset / 10) + 1, publicSearch = false
     while (items.length < skip + 30) {
       this.current(generation)
-      const body = await this.request('/search', { query: { keyword: keywords, type: kind === 'artist' ? 'singer' : kind, page, limit: 10 } })
+      const query = { keyword: keywords, type: kind === 'artist' ? 'singer' : kind, page, limit: 10 }
+      let body = await this.request('/search', { query, ...(publicSearch ? { token: '' } : {}) })
+      // Some authenticated QQ searches return successful empty pages. Try the
+      // same QQ public catalog once, then keep that identity for pagination.
+      if (this.user && !publicSearch && !items.length && !list(body.items).length) {
+        const fallback = await this.request('/search', { query, token: '' })
+        if (list(fallback.items).length) { body = fallback; publicSearch = true }
+      }
       items.push(...list(body.items)); total = Number(body.total ?? Math.max(total, (page - 1) * 10 + list(body.items).length))
       if (!body.more || !list(body.items).length) break
       page++
@@ -329,17 +336,29 @@ export class QqMusicProvider implements MusicProvider {
     if (quality === 'hires') unsupported('QQ 音乐当前接口暂不提供独立的 Hi-Res 档位，请选择无损或其他音质。')
     const raw = await this.rawTrack(id)
     this.current(generation)
-    const level = quality === 'lossless' ? 'flac' : quality === 'standard' ? '128' : '320'
-    const body = await this.account(`/getMusicPlay/${encodeURIComponent(id)}`, { query: { quality: level, ...(raw.file?.media_mid ? { mediaId: text(raw.file.media_mid) } : {}) } })
-    this.current(generation)
-    const entry = body.data?.playUrl?.[id]
-    if (!entry?.url || entry.error || entry.preview && download) throw new MusicError('UNAVAILABLE', entry?.restriction?.category === 'paid_required' ? 'QQ 音乐该歌曲或音质需要会员或购买权限。' : 'QQ 音乐未返回可用的完整音频，可能受账号权限或版权限制。')
+    const levels = quality === 'lossless' ? ['flac', '320', '128', 'm4a'] : quality === 'standard' ? ['128', 'm4a'] : ['320', '128', 'm4a']
+    let entry: Raw | undefined, level = levels[0]
+    for (const candidate of levels) {
+      this.current(generation)
+      const body = await this.account(`/getMusicPlay/${encodeURIComponent(id)}`, { query: { quality: candidate, ...(raw.file?.media_mid ? { mediaId: text(raw.file.media_mid) } : {}) } })
+      this.current(generation)
+      entry = body.data?.playUrl?.[id]; level = candidate
+      if (entry?.url && !entry.error && !(entry.preview && download)) break
+    }
+    if (!entry?.url || entry.error || entry.preview && download) {
+      const hint = entry?.restriction?.hint?.key
+      const message = hint === 'playback.maybe-region-restricted' ? 'QQ 音乐提示该歌曲可能存在地区限制。'
+        : hint === 'playback.maybe-membership' || ['membership_required', 'purchase_required', 'entitlement_required'].includes(entry?.restriction?.key) ? 'QQ 音乐提示该歌曲可能需要会员或购买权限。'
+        : 'QQ 音乐未返回可播放的音频地址，原因尚未确认。请尝试重新扫码登录。'
+      throw new MusicError('UNAVAILABLE', message)
+    }
     let url: URL
     try { url = new URL(entry.url) } catch { throw new MusicError('UNAVAILABLE', 'QQ 音乐音频地址无效。') }
     if (!['https:', 'http:'].includes(url.protocol)) throw new MusicError('UNAVAILABLE', 'QQ 音乐音频地址协议无效。')
-    const actual = entry.quality === 'flac' ? 'lossless' : ['128', 'm4a'].includes(text(entry.quality)) ? 'standard' : entry.quality === '320' ? 'exhigh' : quality === 'higher' ? 'exhigh' : quality
+    const returnedLevel = text(entry.quality) || level
+    const actual = returnedLevel === 'flac' ? 'lossless' : ['128', 'm4a'].includes(returnedLevel) ? 'standard' : 'exhigh'
     const format = url.pathname.match(/\.(flac|mp3|m4a|wav|ogg|aac)(?:$|\/)/i)?.[1]?.toLowerCase() || (level === 'flac' ? 'flac' : 'mp3')
-    const size = Number(level === 'flac' ? raw.file?.size_flac : level === '320' ? raw.file?.size_320mp3 : raw.file?.size_128mp3) || 0
+    const size = Number(returnedLevel === 'flac' ? raw.file?.size_flac : returnedLevel === '320' ? raw.file?.size_320mp3 : returnedLevel === 'm4a' ? raw.file?.size_96aac : raw.file?.size_128mp3) || 0
     return { url: url.href, quality: actual, bitrate: actual === 'lossless' ? 0 : actual === 'exhigh' ? 320000 : 128000, format, size, trial: Boolean(entry.preview) }
   }
   async lyrics(id: string): Promise<Lyrics> {

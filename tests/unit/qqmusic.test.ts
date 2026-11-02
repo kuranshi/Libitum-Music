@@ -107,6 +107,71 @@ describe('QQ music provider', () => {
     await expect(provider.dislike('QqSong1001')).rejects.toMatchObject({ code: 'UNSUPPORTED' })
     expect((await provider.radio({ mode: 'FM' }))[0].provider).toBe('qq')
   })
+  it('uses the QQ public catalog when authenticated search succeeds with an empty page', async () => {
+    const fixture = createQqMusicFixture(), calls: string[] = []
+    const provider = await loggedIn({ async request(path, options) {
+      if (path === '/search') {
+        calls.push(options?.token || 'public')
+        if (options?.token) return { status: 200, body: { code: 200, items: [], total: 0, more: false } }
+      }
+      return fixture.request(path, options)
+    } })
+    const result = await provider.search('晚风', 'song', 0)
+    expect(result.tracks).toHaveLength(6)
+    expect(result.tracks.every(track => track.provider === 'qq')).toBe(true)
+    expect(calls).toEqual(['fixture-qq-session', 'public'])
+    expect(await provider.library('likes', 0)).toMatchObject({ likedIds: ['QqSong1001'] })
+  })
+  it('keeps public QQ search pagination working beyond the first page', async () => {
+    const fixture = createQqMusicFixture(), pages: number[] = []
+    const provider = await loggedIn({ async request(path, options) {
+      if (path !== '/search') return fixture.request(path, options)
+      if (options?.token) return { status: 200, body: { code: 200, items: [], total: 0, more: false } }
+      const page = Number(options?.query?.page); pages.push(page)
+      return { status: 200, body: { code: 200, items: Array.from({ length: 10 }, (_, index) => ({ mid: `Song${(page - 1) * 10 + index}`, title: '示例', singer: [], album: {} })), total: 50, more: page < 5 } }
+    } })
+    const result = await provider.search('示例', 'song', 30)
+    expect(pages).toEqual([4, 5])
+    expect(result.tracks.map(track => track.id)).toEqual(Array.from({ length: 20 }, (_, index) => `Song${30 + index}`))
+  })
+  it('tries lower QQ qualities and reports the actual stream when high quality is unavailable', async () => {
+    const fixture = createQqMusicFixture(), qualities: unknown[] = []
+    const provider = await loggedIn({ async request(path, options) {
+      if (path.startsWith('/getMusicPlay/')) {
+        qualities.push(options?.query?.quality)
+        const available = options?.query?.quality === '128'
+        return { status: 200, body: { data: { playUrl: { QqSong1001: available ? { url: 'https://example.com/sample.mp3', error: false } : { url: '', error: '暂无播放链接', restriction: { key: 'url_unavailable' } } } } } }
+      }
+      return fixture.request(path, options)
+    } })
+    expect(await provider.resolve('QqSong1001', 'lossless')).toMatchObject({ url: 'https://example.com/sample.mp3', quality: 'standard', bitrate: 128000, format: 'mp3', trial: false })
+    expect(qualities).toEqual(['flac', '320', '128'])
+  })
+  it('does not report a missing QQ URL as confirmed copyright or membership denial', async () => {
+    const fixture = createQqMusicFixture(), qualities: unknown[] = []
+    const provider = await loggedIn({ async request(path, options) {
+      if (path.startsWith('/getMusicPlay/')) {
+        qualities.push(options?.query?.quality)
+        return { status: 200, body: { data: { playUrl: { QqSong1001: { url: '', error: '暂无播放链接', restriction: { key: 'url_unavailable' } } } } } }
+      }
+      return fixture.request(path, options)
+    } })
+    await expect(provider.resolve('QqSong1001', 'exhigh')).rejects.toMatchObject({ code: 'UNAVAILABLE', message: expect.stringContaining('原因尚未确认') })
+    expect(qualities).toEqual(['320', '128', 'm4a'])
+  })
+  it('stops quality fallback after an account change', async () => {
+    const fixture = createQqMusicFixture(), qualities: unknown[] = []
+    let provider: QqMusicProvider
+    provider = await loggedIn({ async request(path, options) {
+      if (path.startsWith('/getMusicPlay/')) {
+        qualities.push(options?.query?.quality); provider.setSession('', null)
+        return { status: 200, body: { data: { playUrl: {} } } }
+      }
+      return fixture.request(path, options)
+    } })
+    await expect(provider.resolve('QqSong1001', 'lossless')).rejects.toMatchObject({ code: 'SESSION_CHANGED' })
+    expect(qualities).toEqual(['flac'])
+  })
   it('rejects a pending response after an account change', async () => {
     let release!: () => void
     const pending = new Promise<void>(resolve => { release = resolve })

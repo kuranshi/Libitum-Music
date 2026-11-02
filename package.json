@@ -55,7 +55,7 @@
         "entry": {
           "Name": "Libitum music",
           "Comment": "网易云音乐与 QQ 音乐桌面客户端",
-          "Keywords": "Music;NetEase;Audio;"
+          "Keywords": "Music;NetEase;QQMusic;Audio;"
         }
       },
       "artifactName": "libitum-music-${version}-${arch}.${ext}"

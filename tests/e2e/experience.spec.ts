@@ -18,7 +18,7 @@ test.beforeAll(async()=>{
   const env:Record<string,string>={...process.env,CLOUD_MUSIC_TEST:'1',CLOUD_MUSIC_TEST_DIR:directory,CLOUD_MUSIC_TEST_URL:`http://127.0.0.1:${port}/audio.wav`};delete env.ELECTRON_RUN_AS_NODE
   instance=await electron.launch({args:[resolve('out/main/index.js'),'--no-sandbox','--disable-gpu','--ozone-platform=headless','--password-store=basic'],env})
   page=await instance.firstWindow();await expect(page.locator('.app-shell')).toBeVisible()
-  const login=await page.evaluate(()=>window.music.invoke('auth.importCookie',{cookie:'MUSIC_U=fixture'}));expect(login.ok).toBe(true)
+  const login=await page.evaluate(()=>window.music.invoke('auth.importCookie',{ provider: 'netease',cookie:'MUSIC_U=fixture'}));expect(login.ok).toBe(true)
   await page.getByLabel('搜索音乐').fill('晚风');await page.getByLabel('搜索音乐').press('Enter');await page.getByRole('button',{name:'播放 晚风经过',exact:true}).click();await expect(page.getByRole('button',{name:'暂停播放',exact:true})).toBeVisible();await page.getByRole('button',{name:'暂停播放',exact:true}).click()
 })
 test.afterAll(async()=>{if(instance)await instance.close();if(server)await new Promise<void>(resolve=>server.close(()=>resolve()));if(directory)await rm(directory,{recursive:true,force:true})})
@@ -74,7 +74,7 @@ test('adds the playing song to an editable playlist and handles an existing entr
   await page.locator('.listening-actions').getByRole('button',{name:'加入歌单',exact:true}).click()
   await page.getByRole('button',{name:'我的测试歌单 1 首',exact:true}).click()
   await expect(page.getByText('这首歌已在该歌单中。',{exact:true})).toBeVisible()
-  const detail=await page.evaluate(()=>window.music.invoke('catalog.detail',{kind:'playlist',id:'102',offset:0}));expect(detail.ok&&detail.data.tracks.map(t=>t.id)).toEqual(['1001'])
+  const detail=await page.evaluate(()=>window.music.invoke('catalog.detail',{ provider: 'netease',kind:'playlist',id:'102',offset:0}));expect(detail.ok&&detail.data.tracks.map(t=>t.id)).toEqual(['1001'])
 })
 test('confirms album subscription and cancellation against the refreshed library',async()=>{
   await page.getByLabel('搜索音乐').fill('一起听见');await page.getByLabel('搜索音乐').press('Enter')
@@ -291,12 +291,20 @@ test('changes all ordinary text without touching the wallpaper, and previews and
   await page.evaluate(()=>window.music.invoke('settings.update',{theme:'light',wallpaperBrightness:.8,wallpaperOverlay:.15,wallpaperBlur:12,panelOpacity:.96,fontColor:'',fontFamily:'',backgroundColor:'',autoWallpaperText:true,wallpaperScope:'app'}))
   await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'外观与播放页',exact:true}).click()
   await expect(page.locator('.music-background img')).toBeVisible()
-  const backgroundShot=async()=>{const style=await page.addStyleTag({content:'.app-shell>:not(.music-background){visibility:hidden!important}'});try{return await page.screenshot({animations:'disabled'})}finally{await style.evaluate(e=>(e as HTMLElement).remove())}}
+  await page.locator('.music-background img').evaluate((image:HTMLImageElement)=>image.decode())
+  // Exclude the content scrollbar too: Chromium can paint a corner pixel even
+  // when its scroll container is hidden. The wallpaper stays byte-for-byte checked.
+  const backgroundShot=async()=>{const style=await page.addStyleTag({content:'.app-shell>:not(.music-background),.app-shell>:not(.music-background) *{visibility:hidden!important}*::-webkit-scrollbar{display:none!important}'});try{return await page.screenshot({animations:'disabled'})}finally{await style.evaluate(e=>(e as HTMLElement).remove())}}
   const background=await backgroundShot(),filter=await page.locator('.music-background img').evaluate(e=>getComputedStyle(e).filter)
   await page.getByLabel('自定义文字颜色',{exact:true}).evaluate(e=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(e,'#294eb0');e.dispatchEvent(new Event('input',{bubbles:true}))})
   await page.getByRole('button',{name:'应用外观',exact:true}).click()
   await expect(page.getByRole('checkbox',{name:'壁纸文字自动配色',exact:true})).not.toBeChecked()
-  expect((await backgroundShot()).equals(background)).toBe(true)
+  const changedBackground=await backgroundShot()
+  if(!changedBackground.equals(background)) {
+    await test.info().attach('wallpaper-before',{body:background,contentType:'image/png'})
+    await test.info().attach('wallpaper-after',{body:changedBackground,contentType:'image/png'})
+  }
+  expect(changedBackground.equals(background)).toBe(true)
   expect(await page.locator('.music-background img').evaluate(e=>getComputedStyle(e).filter)).toBe(filter)
   await expect(page.locator('.wallpaper-contrast-shade')).toHaveCount(0)
   for(const selector of ['.settings-card h2','.settings-card strong','.settings-card p','.settings-nav button:not(.selected)','.sidebar .nav-item:not(.selected)']){
@@ -382,7 +390,7 @@ test('follows timed lyrics inside their own viewport while cover and comments sc
 })
 
 test('shows an explicit retry for failed lyrics and static text without timestamps',async()=>{
-  const result=await page.evaluate(()=>window.music.invoke('catalog.search',{keywords:'晚风',kind:'song',offset:0}));if(!result.ok)throw new Error('Fixture search failed')
+  const result=await page.evaluate(()=>window.music.invoke('catalog.search',{ provider: 'netease',keywords:'晚风',kind:'song',offset:0}));if(!result.ok)throw new Error('Fixture search failed')
   await page.evaluate(tracks=>window.music.invoke('player.play',{tracks,index:4}),result.data.tracks)
   await expect(page.locator('#listening-lyrics .error-state')).toBeVisible()
   await page.locator('#listening-lyrics').getByRole('button',{name:'重新加载',exact:true}).click();await expect(page.locator('#listening-lyrics .lyric-line')).toHaveCount(43)

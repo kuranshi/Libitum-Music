@@ -52,7 +52,7 @@ npm run preview
 | `src/main/index.ts` | Electron 生命周期、IPC、窗口、会话和服务协调 |
 | `src/main/provider.ts` | 网易云接口调用、账号与内容操作 |
 | `src/main/qqmusic-provider.ts`、`qqmusic-runtime.ts` | QQ 字段转换、扫码、会话与本机 MQTT 连接 |
-| `src/main/platform-router.ts` | 未登录默认网易云、登录候选与活动平台隔离、过期结果丢弃 |
+| `src/main/platform-router.ts` | 双端独立会话、显式平台路由、各端账号版本与过期结果隔离 |
 | `src/main/player.ts`、`mpv.ts` | 播放状态、队列协调与 mpv JSON IPC |
 | `src/main/downloads.ts` | 下载任务及本地文件处理 |
 | `src/main/media.ts` | 壁纸导入、转换与资源访问 |
@@ -63,9 +63,17 @@ npm run preview
 | `tests/` | 单元、集成与 Electron 流程测试 |
 | `scripts/` | 安装包、运行检查与发布审计 |
 
-网易云接口依赖锁定为 `@neteasecloudmusicapienhanced/api@4.41.1`，QQ 音乐锁定为 `@yakult-green-tea/qq-music-api@3.3.5`。QQ 在 worker 内调用公共 `serverless` 处理函数并注入本机 MQTT 连接，不加载会启动 HTTP 服务的包根入口，不需要部署代理。平台字段由各自 provider 转换为现有歌曲、歌单、歌词和播放结构，renderer 和 mpv 继续复用。
+网易云接口依赖锁定为 `@neteasecloudmusicapienhanced/api@4.41.1`，QQ 音乐锁定为 `@yakult-green-tea/qq-music-api@3.3.5`。QQ 在 worker 内复用原生登录服务和共用路由，直接连接本机 MQTT，不加载会启动 HTTP 服务的包根入口，不需要部署代理。该版本没有独立服务的公开导出，`qqmusic-core.ts` 集中加载锁定版本的内部模块；升级依赖时须复验这些入口及正式安装包。
 
-默认仅初始化网易云；选择 QQ 登录才创建 QQ runtime，登录候选不会提前切换活动平台。账号提交、取消和恢复沿用现有 safeStorage 流程，旧版未标记平台的数据按网易云迁移。项目不启用跨平台替代音源。当前范围不包括音乐云盘、手机号验证码、多账号并行、网易云／QQ 以外的平台及应用内自动更新。
+QQ 会话将凭证及扫码时完成初始化的设备状态一起加密封存，恢复、搜索、播放和续期使用同一设备。旧版只封存凭证的 QQ 会话需要重新扫码。带会话的搜索成功但页面为空时，同平台匿名目录会再查一次；高音质未返回地址时按较低档位重试，并报告实际音质。没有地址本身不作为会员或版权限制已确认的证据。平台字段由各自 provider 转换为现有歌曲、歌单、歌词和播放结构，renderer 和 mpv 继续复用。
+
+每个平台独立维护账号、登录候选与版本计数，`Bootstrap.sessions` 返回两个会话。音乐内容 IPC 显式携带 `provider`；资源、收藏、歌词与详情导航使用所属平台，不再依赖全局活动平台。QQ 运行时仍按需创建。
+
+设置保存非空的 `enabledProviders` 及九个页面的 `pageProviders`。关闭平台停止该端播放与下载，但保留加密登录和原页面偏好；单端模式只临时使用唯一开启的平台。播放器允许混合队列，下载管理器同时维护两端所有者，并共用总并发上限 2。
+
+`session.json` 的数据层使用 `{ schemaVersion: 2, sessions: { netease?, qq? } }`，每端独立加密；从旧单账号形状迁移，未标记平台的旧记录按网易云处理。损坏或失效的一端不会删除另一端有效记录。继续使用 safeStorage，密钥环不可用时新登录只保留本次会话。
+
+项目不启用跨平台替代音源。当前不包括音乐云盘、手机号验证码、同一平台多个账号并存、网易云／QQ 以外的平台及应用内自动更新。
 
 ## 验证命令
 
@@ -97,7 +105,7 @@ npm run test:audio
 npm run test:desktop
 ```
 
-单元及 Electron 流程使用明确启用的合成测试数据与临时目录。模拟账号只在未打包、显式启用测试模式时可用，正式安装包不能通过测试环境变量启用。公开网络检查不使用真实账号。
+单元及 Electron 流程使用明确启用的合成测试数据与临时目录。跨重启会话回归在临时启动器中注入 AES-GCM 加密替身，验证实际应用的存档与恢复；产品不包含替身或测试密钥，也不把它当作实际系统密钥环验收。模拟账号只在未打包、显式启用测试模式时可用，正式安装包不能通过测试环境变量启用。公开网络检查不使用真实账号。
 
 音频检查使用隔离测试音频和临时虚拟输出，不录制麦克风，结束后清理。它们不等同于物理设备有声试听、拔插设备或各桌面环境的长期验收。项目历史检查结果与未覆盖项集中记录在 [VALIDATION.md](../VALIDATION.md)，不要将已有记录当作每次修改后都已重新执行。
 

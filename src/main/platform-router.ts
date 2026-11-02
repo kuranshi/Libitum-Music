@@ -3,11 +3,10 @@ import { isProvider } from '../shared/platforms'
 import type { ProviderId, User } from '../shared/types'
 import type { MusicProvider } from './provider'
 
-/** Keep login candidates separate from the account serving catalog/playback calls. */
+/** Independent sessions and revisions; every content request declares its platform. */
 export class PlatformRouter {
   private instances = new Map<ProviderId, Promise<MusicProvider>>()
-  private revision = 0
-  active: ProviderId = 'netease'
+  private revisions: Record<ProviderId, number> = { netease: 0, qq: 0 }
   constructor(netease: MusicProvider, private createQq: () => Promise<MusicProvider>) {
     this.instances.set('netease', Promise.resolve(netease))
   }
@@ -21,37 +20,26 @@ export class PlatformRouter {
     return provider
   }
   async setSession(id: ProviderId, cookie: string, user: User | null) {
-    const revision = ++this.revision, previous = this.active
+    const revision = ++this.revisions[id]
     const target = await this.candidate(id)
-    if (revision !== this.revision) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新登录。')
-    if (previous !== id) (await this.candidate(previous)).setSession('', null)
-    if (revision !== this.revision) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新登录。')
+    if (revision !== this.revisions[id]) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新登录。')
     target.setSession(cookie, user)
-    this.active = id
   }
-  async clear() {
-    // Invalidate reads before awaiting either provider's cleanup.
-    const revision = ++this.revision, previous = this.active
-    this.active = 'netease'
-    const provider = await this.candidate(previous)
-    if (revision !== this.revision) return
-    provider.setSession('', null)
-    if (previous !== 'netease') {
-      const netease = await this.candidate('netease')
-      if (revision === this.revision) netease.setSession('', null)
-    }
+  invalidate(id: ProviderId) { this.revisions[id]++ }
+  async clear(id: ProviderId) {
+    await this.setSession(id, '', null)
   }
-  async run<T>(operation: (provider: MusicProvider) => Promise<T> | T, expected?: ProviderId): Promise<T> {
-    const revision = this.revision, active = this.active
-    if (expected !== undefined && expected !== active) throw new MusicError('SESSION_CHANGED', '歌曲所属平台已改变，请重新选择。')
-    const provider = await this.candidate(active)
-    if (revision !== this.revision) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新加载。')
+  async run<T>(operation: (provider: MusicProvider) => Promise<T> | T, id: ProviderId): Promise<T> {
+    if (!isProvider(id)) throw new MusicError('INVALID_ARGUMENT', '音乐平台无效。')
+    const revision = this.revisions[id]
+    const provider = await this.candidate(id)
+    if (revision !== this.revisions[id]) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新加载。')
     try {
       const result = await operation(provider)
-      if (revision !== this.revision) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新加载。')
+      if (revision !== this.revisions[id]) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新加载。')
       return result
     } catch (error) {
-      if (revision !== this.revision) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新加载。')
+      if (revision !== this.revisions[id]) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新加载。')
       throw error
     }
   }

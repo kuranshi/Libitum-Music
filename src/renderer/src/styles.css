@@ -173,3 +173,11 @@
 .app-shell>.playback-panel{top:calc(var(--titlebar-height) + 83px)}
 .app-shell>.modal-backdrop{top:var(--titlebar-height)}
 .app-shell .modal{max-height:calc(100vh - var(--titlebar-height) - 60px)}
+
+.platform-switch.tabs{display:flex;width:fit-content;gap:6px;padding:4px;margin:0 0 22px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.platform-switch.tabs button{min-width:112px;border-radius:8px;padding:9px 16px}
+.platform-account-profile{display:flex;gap:12px;align-items:center;min-width:0}
+.platform-account-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover}
+.platform-account .editor-actions{flex-wrap:wrap;justify-content:flex-end}
+
+.platform-account .switch input:disabled+span{opacity:.55}

@@ -14,10 +14,10 @@ async function main() {
   await fs.chmod(path.join(install, 'chrome-sandbox'), 0o4755)
   const size = Number(execFileSync('du', ['-sk', install], { encoding: 'utf8' }).split(/\s/)[0])
   const dependencyFields = ['depends','recommends'].map(field => `${field[0].toUpperCase()+field.slice(1)}: ${manifest.build.deb[field].join(', ')}`).join('\n')
-  const control = `Package: cloud-music-player\nVersion: ${manifest.version}\nSection: sound\nPriority: optional\nArchitecture: amd64\nMaintainer: Libitum music contributors\nInstalled-Size: ${size}\n${dependencyFields}\nDescription: Libitum music - NetEase Cloud Music desktop client\n A Chinese-language Linux music player with account login, recommendations,\n collections, native mpv playback, audio output selection and downloads.\n`
+  const control = `Package: cloud-music-player\nVersion: ${manifest.version}\nSection: sound\nPriority: optional\nArchitecture: amd64\nMaintainer: Libitum music contributors\nInstalled-Size: ${size}\n${dependencyFields}\nDescription: Libitum music - NetEase and QQ Music desktop client\n A Chinese-language Linux music player with account login, recommendations,\n collections, native mpv playback, audio output selection and downloads.\n`
   await fs.writeFile(path.join(stage, 'DEBIAN/control'), control)
   await fs.mkdir(path.join(stage, 'usr/share/applications'), { recursive: true })
-  await fs.writeFile(path.join(stage, 'usr/share/applications/cloud-music-player.desktop'), '[Desktop Entry]\nType=Application\nName=Libitum music\nName[en]=Libitum music\nComment=网易云音乐桌面客户端\nExec=/opt/cloud-music-player/cloud-music-player %U\nIcon=cloud-music-player\nTerminal=false\nCategories=AudioVideo;Audio;Player;\nStartupWMClass=cloud-music-player\nKeywords=Music;NetEase;Audio;\n')
+  await fs.writeFile(path.join(stage, 'usr/share/applications/cloud-music-player.desktop'), '[Desktop Entry]\nType=Application\nName=Libitum music\nName[en]=Libitum music\nComment=网易云音乐与 QQ 音乐桌面客户端\nExec=/opt/cloud-music-player/cloud-music-player %U\nIcon=cloud-music-player\nTerminal=false\nCategories=AudioVideo;Audio;Player;\nStartupWMClass=cloud-music-player\nKeywords=Music;NetEase;QQMusic;Audio;\n')
   await fs.mkdir(path.join(stage, 'usr/share/icons/hicolor/512x512/apps'), { recursive: true })
   await fs.copyFile(path.join(root, 'resources/icon.png'), path.join(stage, 'usr/share/icons/hicolor/512x512/apps/cloud-music-player.png'))
   await fs.mkdir(path.join(stage, 'usr/share/doc/cloud-music-player'), { recursive: true })

@@ -51,10 +51,10 @@ test('QR login displays and invalid Cookie has an actionable error', async () =>
   await page.getByRole('button', { name: '验证并登录' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '测试听众，今天想听点什么？' })).toBeVisible()
-  const invalid = await page.evaluate(() => window.music.invoke('auth.importCookie', { cookie: 'MUSIC_U=bad' }))
+  const invalid = await page.evaluate(() => window.music.invoke('auth.importCookie', { provider: 'netease', cookie: 'MUSIC_U=bad' }))
   expect(invalid.ok).toBe(false)
   const active = await page.evaluate(() => window.music.invoke('app.bootstrap'))
-  expect(active.ok && active.data.session.user?.id).toBe('42')
+  expect(active.ok && active.data.sessions.netease.user?.id).toBe('42')
 })
 test('search, play through real mpv IPC, seek, change quality, lyrics and queue', async () => {
   await page.getByLabel('搜索音乐').fill('晚风'); await page.getByLabel('搜索音乐').press('Enter')
@@ -117,9 +117,9 @@ test('recommendation radio starts and settings persist theme', async () => {
 test('logout removes account data and does not persist plaintext cookies', async () => {
   await page.getByRole('button', { name: '账号与隐私', exact: true }).click()
   await page.getByRole('button', { name: '退出登录', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '让生活，有声有色。', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: '网易云音乐账号', exact: true }).getByText('尚未登录', { exact: true })).toBeVisible()
   const saved = JSON.parse(await readFile(join(directory, 'session.json'), 'utf8'))
-  expect(saved.data).toBeNull()
+  expect(saved.data.sessions).toEqual({})
   for (const file of ['settings.json', 'queue.json', 'downloads.json', 'session.json']) {
     const content = await readFile(join(directory, file), 'utf8').catch(() => '')
     expect(content).not.toContain('MUSIC_U=fixture')

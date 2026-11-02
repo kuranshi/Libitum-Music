@@ -3,6 +3,8 @@ export const QUALITIES = {
 } as const
 export type Quality = keyof typeof QUALITIES
 export type ProviderId = 'netease' | 'qq'
+export type PlatformPage = 'home' | 'daily' | 'radio' | 'fm' | 'likes' | 'playlists' | 'albums' | 'downloads' | 'search'
+export interface PlatformPreferences { enabledProviders: ProviderId[]; pageProviders: Record<PlatformPage, ProviderId> }
 export interface ResourceRef { provider: ProviderId; id: string }
 export interface Artist extends ResourceRef { name: string; coverUrl: string }
 export interface Track extends ResourceRef {
@@ -57,38 +59,38 @@ export interface PlayerState {
   actualQuality: string; bitrate: number; trial: boolean; deviceId: string; devices: AudioDevice[]
   available: boolean; error: string | null; notice: string | null; radio: RadioSpec | null
 }
-export interface Settings extends ExperienceSettings { quality: Quality; downloadQuality: Quality; downloadDirectory: string; deviceId: string; deviceKey?: string; volume: number; theme: 'system' | 'light' | 'dark'; mpvPath: string }
+export interface Settings extends ExperienceSettings, PlatformPreferences { quality: Quality; downloadQuality: Quality; downloadDirectory: string; deviceId: string; deviceKey?: string; volume: number; theme: 'system' | 'light' | 'dark'; mpvPath: string }
 export type DownloadStatus = 'queued' | 'resolving' | 'downloading' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
 export interface DownloadTask {
   id: string; ownerId: string; track: Track; quality: Quality; actualQuality?: string
   status: DownloadStatus; received: number; total: number; path?: string; error?: string; createdAt: number
 }
-export interface Bootstrap { session: Session; settings: Settings; player: PlayerState; downloads: DownloadTask[]; version: string }
+export interface Bootstrap { sessions: Record<ProviderId, Session>; settings: Settings; player: PlayerState; downloads: DownloadTask[]; version: string }
 export interface AppError { code: string; message: string; upstreamCode?: number }
 export type Result<T> = { ok: true; data: T } | { ok: false; error: AppError }
 
 export interface CommandMap {
   'app.bootstrap': { args: void; result: Bootstrap }
-  'auth.qrStart': { args: { provider?: ProviderId } | void; result: QRCode }
-  'auth.qrCheck': { args: { key: string; provider?: ProviderId }; result: QRStatus }
-  'auth.qrCancel': { args: { key: string; provider?: ProviderId }; result: void }
-  'auth.importCookie': { args: { cookie: string; provider?: ProviderId }; result: Session }
-  'auth.logout': { args: void; result: void }
-  'auth.cancel': { args: void; result: void }
-  'catalog.search': { args: { keywords: string; kind: SearchKind; offset: number }; result: SearchResult }
-  'catalog.detail': { args: { kind: CollectionKind; id: string; offset: number }; result: Detail }
-  'catalog.allTracks': { args: { kind: CollectionKind; id: string }; result: Track[] }
-  'catalog.lyrics': { args: { id: string }; result: Lyrics }
-  'catalog.artistAlbums': {args:{id:string;offset:number};result:{albums:Album[];more:boolean}}
-  'catalog.comments': { args: { id: string; offset: number }; result: CommentPage }
-  'home.section': { args: { section: HomeSection }; result: HomeResult }
-  'library.list': { args: { kind: LibraryKind; offset: number }; result: LibraryResult }
-  'library.like': { args: { id: string; like: boolean }; result: void }
-  'library.subscribe': { args: { kind: 'album' | 'playlist'; id: string; subscribe: boolean }; result: SubscriptionResult }
-  'library.subscription': { args: { kind: 'album' | 'playlist'; id: string }; result: SubscriptionResult }
-  'library.writablePlaylists': { args: { offset: number }; result: { collections: Playlist[]; more: boolean } }
-  'library.addToPlaylist': { args: { id: string; trackId: string }; result: { alreadyPresent: boolean } }
-  'library.diagnostics': { args: void; result: Diagnostic[] }
+  'auth.qrStart': { args: { provider: ProviderId }; result: QRCode }
+  'auth.qrCheck': { args: { key: string; provider: ProviderId }; result: QRStatus }
+  'auth.qrCancel': { args: { key: string; provider: ProviderId }; result: void }
+  'auth.importCookie': { args: { cookie: string; provider: ProviderId }; result: Session }
+  'auth.logout': { args: { provider: ProviderId }; result: void }
+  'auth.cancel': { args: { provider: ProviderId }; result: void }
+  'catalog.search': { args: { provider: ProviderId; keywords: string; kind: SearchKind; offset: number }; result: SearchResult }
+  'catalog.detail': { args: { provider: ProviderId; kind: CollectionKind; id: string; offset: number }; result: Detail }
+  'catalog.allTracks': { args: { provider: ProviderId; kind: CollectionKind; id: string }; result: Track[] }
+  'catalog.lyrics': { args: { provider: ProviderId; id: string }; result: Lyrics }
+  'catalog.artistAlbums': {args:{provider:ProviderId;id:string;offset:number};result:{albums:Album[];more:boolean}}
+  'catalog.comments': { args: { provider: ProviderId; id: string; offset: number }; result: CommentPage }
+  'home.section': { args: { provider: ProviderId; section: HomeSection }; result: HomeResult }
+  'library.list': { args: { provider: ProviderId; kind: LibraryKind; offset: number }; result: LibraryResult }
+  'library.like': { args: { provider: ProviderId; id: string; like: boolean }; result: void }
+  'library.subscribe': { args: { provider: ProviderId; kind: 'album' | 'playlist'; id: string; subscribe: boolean }; result: SubscriptionResult }
+  'library.subscription': { args: { provider: ProviderId; kind: 'album' | 'playlist'; id: string }; result: SubscriptionResult }
+  'library.writablePlaylists': { args: { provider: ProviderId; offset: number }; result: { collections: Playlist[]; more: boolean } }
+  'library.addToPlaylist': { args: { provider: ProviderId; id: string; trackId: string }; result: { alreadyPresent: boolean } }
+  'library.diagnostics': { args: { provider: ProviderId }; result: Diagnostic[] }
   'player.play': { args: { tracks: Track[]; index?: number; append?: boolean }; result: void }
   'player.toggle': { args: void; result: void }
   'player.next': { args: void; result: void }
@@ -100,7 +102,7 @@ export interface CommandMap {
   'player.device': { args: { id: string }; result: void }
   'player.refreshDevices': { args: void; result: void }
   'player.remove': { args: { index: number }; result: void }
-  'player.radio': { args: RadioSpec; result: void }
+  'player.radio': { args: RadioSpec & { provider: ProviderId }; result: void }
   'player.dislike': { args: void; result: void }
   'downloads.add': { args: { tracks: Track[]; quality: Quality }; result: void }
   'downloads.cancel': { args: { id: string }; result: void }
@@ -108,7 +110,7 @@ export interface CommandMap {
   'downloads.reveal': { args: { id: string }; result: void }
   'downloads.play': { args: { id: string }; result: void }
   'settings.fonts': { args: undefined; result: string[] }
-  'settings.update': { args: Partial<Pick<Settings, 'downloadQuality' | 'theme' | 'mpvPath' | 'commentsEnabled' | 'autoWallpaperText' | 'backgroundColor' | 'fontColor' | 'fontFamily' | 'rotateCover' | 'visualMode' | 'wallpaperScope' | 'wallpaperBrightness' | 'wallpaperOverlay' | 'wallpaperBlur' | 'panelBlur' | 'panelOpacity' | 'floatingOpacity' | 'floatingEnabled' | 'spectrum'>>; result: Settings }
+  'settings.update': { args: Partial<Pick<Settings, 'downloadQuality' | 'theme' | 'mpvPath' | 'commentsEnabled' | 'autoWallpaperText' | 'backgroundColor' | 'fontColor' | 'fontFamily' | 'rotateCover' | 'visualMode' | 'wallpaperScope' | 'wallpaperBrightness' | 'wallpaperOverlay' | 'wallpaperBlur' | 'panelBlur' | 'panelOpacity' | 'floatingOpacity' | 'floatingEnabled' | 'spectrum' | 'enabledProviders' | 'pageProviders'>>; result: Settings }
   'settings.pickDirectory': { args: void; result: Settings }
   'peq.apply': { args: PeqSettings; result: Settings }
   'peq.import': { args: void; result: PeqSettings | null }
@@ -128,7 +130,7 @@ export interface CommandMap {
   'app.openExternal': { args: { url: string }; result: void }
 }
 export type Command = keyof CommandMap
-export type AppEvent = { type: 'window'; data: WindowState } | { type: 'player'; data: PlayerState } | { type: 'session'; data: Session } | { type: 'downloads'; data: DownloadTask[] } | { type: 'settings'; data: Settings } | { type: 'library'; data: null } | { type: 'notice'; data: string } | { type: 'spectrum'; data: SpectrumFrame } | { type: 'mediaImport'; data: MediaImportState } | { type: 'mini'; data: MiniState }
+export type AppEvent = { type: 'window'; data: WindowState } | { type: 'player'; data: PlayerState } | { type: 'session'; data: { provider: ProviderId; session: Session } } | { type: 'downloads'; data: DownloadTask[] } | { type: 'settings'; data: Settings } | { type: 'library'; data: { provider: ProviderId } } | { type: 'notice'; data: string } | { type: 'spectrum'; data: SpectrumFrame } | { type: 'mediaImport'; data: MediaImportState } | { type: 'mini'; data: MiniState }
 export interface DesktopAPI {
   invoke<K extends Command>(command: K, args?: CommandMap[K]['args']): Promise<Result<CommandMap[K]['result']>>
   onEvent(listener: (event: AppEvent) => void): () => void

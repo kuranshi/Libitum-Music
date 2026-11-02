@@ -33,7 +33,9 @@ export function createQqMusicFixture(audioUrl = '', qrScenario = ''): QqMusicTra
       if (path === '/logout') return ok({ code: 200 })
       if ((path.startsWith('/user/') || path.startsWith('/getMusicPlay/')) && !valid(options)) return auth()
       if (path === '/search') {
-        const items = q.type === 'song' ? songs : q.type === 'album' ? [album()] : q.type === 'singer' ? [{ mid: 'QqArtist301', name: 'QQ测试歌手' }] : [shared()]
+        if (q.keyword === '双端错误隔离验收') return { status: 403, body: { code: 403, errorKey: 'upstream.business-rejected' } }
+        const searchSongs = q.keyword === '双端分页验收' ? Array.from({ length: 65 }, (_, index) => ({ ...songs[index % songs.length], id: 3001 + index, mid: `QqPage${3001 + index}`, title: `QQ分页歌曲 ${index + 1}` })) : songs
+        const items = q.type === 'song' ? searchSongs : q.type === 'album' ? [album()] : q.type === 'singer' ? [{ mid: 'QqArtist301', name: 'QQ测试歌手' }] : [shared()]
         const page = Number(q.page || 1), start = (page - 1) * limit
         return ok({ code: 200, items: items.slice(start, start + limit), total: items.length, more: start + limit < items.length })
       }

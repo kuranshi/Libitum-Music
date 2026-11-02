@@ -1,3 +1,4 @@
+import { platformDefaults } from '../../src/shared/platforms'
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import { experienceDefaults } from '../../src/shared/preferences'
@@ -20,7 +21,7 @@ class FakeMpv extends EventEmitter {
   }
 }
 const track = (id: number) => normalizeTrack({ id, name: `Song ${id}`, dt: 60000 })
-const settings: Settings = { ...experienceDefaults(), quality: 'exhigh', downloadQuality: 'exhigh', downloadDirectory: '/tmp', deviceId: 'auto', volume: 60, theme: 'system', mpvPath: 'mpv' }
+const settings: Settings = { ...experienceDefaults(), ...platformDefaults(), quality: 'exhigh', downloadQuality: 'exhigh', downloadDirectory: '/tmp', deviceId: 'auto', volume: 60, theme: 'system', mpvPath: 'mpv' }
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve() }
 describe('player state transitions', () => {
   it('replaces only its own PEQ filter and rolls back failed changes without losing playback state',async()=>{
@@ -85,7 +86,7 @@ describe('player state transitions', () => {
     let finish: (tracks: any[]) => void = () => {}
     const mpv = new FakeMpv(), backend = { call: () => new Promise(resolve => { finish = resolve }) }
     const player = new Player(mpv as unknown as Mpv, backend as any, settings, () => {}, () => {}, () => {})
-    const pending = player.radio({ mode: 'EXPLORE' })
+    const pending = player.radio({ provider: 'netease', mode: 'EXPLORE' })
     await player.stop(); finish([track(1)]); await pending
     expect(player.state.queue).toHaveLength(0); expect(player.state.radio).toBeNull()
   })
@@ -104,15 +105,38 @@ describe('player state transitions', () => {
     expect(player.state.duration).toBe(0)
     finishStop(); await reset
   })
-  it('rejects mixed platform queues and does not restore them from disk', async () => {
-    const qq: Track = { ...track(1), provider: 'qq' }
-    const player = new Player(new FakeMpv() as unknown as Mpv, { call: async () => ({}) } as any, settings, () => {}, () => {}, () => {})
+  it('restores a mixed queue and resolves the next same-ID song on its own platform', async () => {
+    const qq: Track = { ...track(1), provider: 'qq' }, mpv = new FakeMpv()
+    const backend = { call: vi.fn(async (_method: string, args: any) => ({ url: `https://example.com/${args.provider}`, quality: 'exhigh' })) }
+    const player = new Player(mpv as unknown as Mpv, backend as any, settings, () => {}, () => {}, () => {})
     player.restore({ queue: [track(1), qq], index: 0, position: 12, repeat: 'list' })
-    expect(player.state.queue).toEqual([]); expect(player.state.status).toBe('idle')
-    await expect(player.play([track(1), qq])).rejects.toMatchObject({ code: 'PLATFORM_MISMATCH' })
-    player.restore({ queue: [track(1)], index: 0, position: 12, repeat: 'list' })
-    await expect(player.play([qq], 0, true)).rejects.toMatchObject({ code: 'PLATFORM_MISMATCH' })
-    expect(player.state.queue).toHaveLength(1); expect(player.state.queue[0].provider).toBe('netease')
+    expect(player.state.queue).toHaveLength(2); expect(player.state.status).toBe('paused')
+    await player.next()
+    expect(backend.call).toHaveBeenCalledWith('resolve', { id: '1', provider: 'qq', quality: 'exhigh' })
+    expect(mpv.path).toBe('https://example.com/qq')
+    await player.play([track(2)], 0, true)
+    expect(player.state.queue.map(song => song.provider)).toEqual(['netease', 'qq', 'netease'])
+  })
+  it('does not treat an unavailable NetEase ID as the same failed QQ ID', async () => {
+    const mpv = new FakeMpv(), qq: Track = { ...track(1), provider: 'qq' }
+    const backend = { call: vi.fn(async (_method: string, args: any) => {
+      if (args.provider === 'netease') throw new (await import('../../src/shared/errors')).MusicError('UNAVAILABLE', 'missing')
+      return { url: 'https://example.com/qq', quality: 'exhigh' }
+    }) }
+    const player = new Player(mpv as unknown as Mpv, backend as any, settings, () => {}, () => {}, () => {})
+    await player.play([track(1), qq])
+    expect(player.state.index).toBe(1); expect(mpv.path).toBe('https://example.com/qq')
+  })
+  it('removes only the disabled platform and keeps another platform playing', async () => {
+    const mpv = new FakeMpv(), qq: Track = { ...track(1), provider: 'qq' }
+    const player = new Player(mpv as unknown as Mpv, { call: async () => ({ url: 'https://example.com/net', quality: 'exhigh' }) } as any, settings, () => {}, () => {}, () => {})
+    await player.play([track(1), qq]); mpv.emit('event', { event: 'file-loaded' }); await flush()
+    await player.removeProvider('qq')
+    expect(player.state.status).toBe('playing'); expect(player.state.queue).toHaveLength(1)
+    await player.play([qq], 0, true)
+    await player.removeProvider('netease')
+    expect(player.state.status).toBe('idle'); expect(player.state.queue.map(song => song.provider)).toEqual(['qq'])
+    expect(mpv.commands).toContainEqual(['stop'])
   })
   it('routes equal song IDs by platform and ignores the old platform stream after reset', async () => {
     let finishOld!: (value: unknown) => void
@@ -150,7 +174,7 @@ describe('player state transitions', () => {
       return Promise.resolve({ url: `https://example.com/${args.provider}-${args.id}`, quality: 'exhigh' })
     }) }
     const mpv = new FakeMpv(), player = new Player(mpv as unknown as Mpv, backend as any, settings, () => {}, () => {}, () => {})
-    await player.radio({ mode: 'FM' })
+    await player.radio({ provider: 'netease', mode: 'FM' })
     const pending = player.dislike(); await flush(); await player.reset()
     await player.play([{ ...track(1), provider: 'qq' }])
     finishDislike(); await pending

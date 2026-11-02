@@ -43,7 +43,7 @@ async function main() {
       if (bootstrap?.ok && bootstrap.data.player.available) break
       await delay(200)
     }
-    if (!bootstrap?.ok || !bootstrap.data.player.available || bootstrap.data.session.user !== null) throw new Error('Clean packaged startup or mpv initialization failed')
+    if (!bootstrap?.ok || !bootstrap.data.player.available || bootstrap.data.sessions.netease.user !== null) throw new Error('Clean packaged startup or mpv initialization failed')
     const appearance = await evaluate(`window.music.invoke('settings.update',{theme:'dark',panelBlur:8})`)
     if (!appearance?.ok) throw new Error('Settings IPC failed')
     const wav = path.join(directory, 'tone.wav'), video = path.join(directory, 'background.mp4')

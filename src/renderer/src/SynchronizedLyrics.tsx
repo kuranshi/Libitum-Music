@@ -4,7 +4,7 @@ import {Busy,Empty,ErrorState} from './components'
 import {request,useApp,useResource} from './state'
 
 export function SynchronizedLyrics({trackId}:{trackId:string}){
-  const {data,act}=useApp(),resource=useResource(()=>request('catalog.lyrics',{id:trackId}),[trackId])
+  const { provider, session, data,act } = useApp(),resource=useResource(()=>request('catalog.lyrics', { provider, id:trackId}),[trackId])
   const groups=useMemo(()=>lyricGroups(resource.data?.original||'',resource.data?.translated||''),[resource.data])
   const current=lyricIndex(groups,data.player.position),scroll=useRef<HTMLDivElement>(null),active=useRef<HTMLButtonElement>(null)
   const [browsing,setBrowsing]=useState(false),manual=useRef(false),timer=useRef<ReturnType<typeof setTimeout>|null>(null)

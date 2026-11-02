@@ -1,3 +1,4 @@
+import { sessionRecords, type SavedSessions, type SavedSession, type SessionArchive } from './session-records'
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, screen, shell } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -13,7 +14,7 @@ import { isTrack, validateCommand } from './validation'
 import { MusicError, publicError } from '../shared/errors'
 import { QUALITIES, type AppEvent, type Bootstrap, type Command, type DownloadTask, type Session, type Settings, type User } from '../shared/types'
 import type { MiniState, ProviderId, WindowState } from '../shared/types'
-import { sessionProvider } from '../shared/platforms'
+import { PLATFORM_IDS, isProvider, normalizePlatforms, platformDefaults, emptySessions, trackKey } from '../shared/platforms'
 import { experienceDefaults, normalizeExperience } from '../shared/preferences'
 import { parsePeq } from '../shared/peq'
 import { MediaLibrary } from './media'
@@ -37,27 +38,29 @@ let miniLikes = new Set<string>()
 let miniTrack = ''
 let backend: WorkerBackend
 let player: Player
-let session: Session = { user: null, persistent: false, provider: 'netease' }
+const sessions = emptySessions()
 let settings: Settings
 let settingsStore: JsonStore<Settings>
 let queueStore: JsonStore<SavedQueue>
-let sessionStore: JsonStore<{ encrypted: string; user: User; provider?: ProviderId } | null>
+let sessionStore: JsonStore<SessionArchive | SavedSession | null>
+let persistedSessions: SavedSessions = {}
 let tasks: DownloadTask[] = []
 let queueTimer: ReturnType<typeof setTimeout> | null = null
 let exiting = false
-let clearing: Promise<void> | null = null
-let authEpoch = 0
-let loginAttempt = 0
-let switchingAccount = false
-let authChanges: Promise<unknown> = Promise.resolve()
-let pendingQr: { key: string; backendKey: string; provider: ProviderId; attempt: number; epoch: number } | null = null
-let loginProvider: ProviderId | null = null
-let activeCredentials: { cookie: string; user: User; provider: ProviderId } | null = null
+const authEpoch: Record<ProviderId, number> = { netease: 0, qq: 0 }
+const accessRevision: Record<ProviderId, number> = { netease: 0, qq: 0 }
+const loginAttempt: Record<ProviderId, number> = { netease: 0, qq: 0 }
+const switchingAccounts = new Set<ProviderId>()
+const clearingAccounts: Partial<Record<ProviderId, Promise<void>>> = {}
+const authChanges: Record<ProviderId, Promise<unknown>> = { netease: Promise.resolve(), qq: Promise.resolve() }
+type QrFlow = { key: string; backendKey: string; provider: ProviderId; attempt: number; epoch: number }
+const pendingQr: Record<ProviderId, QrFlow | null> = { netease: null, qq: null }
+const activeCredentials: Record<ProviderId, { cookie: string; user: User; provider: ProviderId } | null> = { netease: null, qq: null }
 const send = (event: AppEvent) => {
   if (window && !window.isDestroyed()) window.webContents.send('music:event', event)
   if (miniWindow && !miniWindow.isDestroyed() && ['player','library','session','settings'].includes(event.type)) {
     miniWindow.webContents.send('music:event', { type:'mini', data:miniSnapshot() } satisfies AppEvent)
-    const id=player?.state.queue[player.state.index]?.id || ''
+    const current=player?.state.queue[player.state.index], id=current ? trackKey(current) : ''
     if (['library','session'].includes(event.type) || id!==miniTrack) { miniTrack=id; void refreshMiniLike() }
   }
   if (event.type === 'player' || event.type === 'settings') syncSpectrum()
@@ -75,13 +78,21 @@ function miniSnapshot(): MiniState {
   // Only visual preferences reach the card: never account data, directories or wallpaper names.
   const {theme,autoWallpaperText,backgroundColor,fontColor,fontFamily,visualMode,wallpaper,wallpaperBrightness,wallpaperOverlay,wallpaperBlur,panelBlur,panelOpacity,floatingOpacity}=settings
   const appearance={theme,autoWallpaperText,backgroundColor,fontColor,fontFamily,visualMode,wallpaper:wallpaper?{id:wallpaper.id,kind:wallpaper.kind,name:''}:null,wallpaperBrightness,wallpaperOverlay,wallpaperBlur,panelBlur,panelOpacity,floatingOpacity}
-  return { appearance, track, status:state?.status || 'idle',position:state?.position || 0,duration:state?.duration || 0,volume:state?.volume || 0,liked:!!track && miniLikes.has(track.id) }
+  return { appearance, track, status:state?.status || 'idle',position:state?.position || 0,duration:state?.duration || 0,volume:state?.volume || 0,liked:!!track && miniLikes.has(trackKey(track)) }
 }
 async function refreshMiniLike() {
-  const epoch=authEpoch
-  if (!session.user) miniLikes.clear()
-  else { try { const result=await backend.call('library.list',{kind:'likes',offset:0}); if(epoch!==authEpoch) return; miniLikes=new Set(result.likedIds) } catch { return } }
-  if(miniWindow && !miniWindow.isDestroyed()) miniWindow.webContents.send('music:event',{type:'mini',data:miniSnapshot()})
+  const track = player?.state.queue[player.state.index]
+  if (!track || !sessions[track.provider].user || !settings.enabledProviders.includes(track.provider)) miniLikes.clear()
+  else {
+    const provider = track.provider, epoch = authEpoch[provider], key = trackKey(track)
+    try {
+      const result = await backend.call('library.list', { provider, kind: 'likes', offset: 0 })
+      const current = player.state.queue[player.state.index]
+      if (epoch !== authEpoch[provider] || !current || trackKey(current) !== key) return
+      miniLikes = new Set(result.likedIds.map((id: string) => `${provider}:${id}`))
+    } catch { return }
+  }
+  if (miniWindow && !miniWindow.isDestroyed()) miniWindow.webContents.send('music:event', { type: 'mini', data: miniSnapshot() })
 }
 const notice = (message: string) => send({ type: 'notice', data: message })
 function saveSettings(patch: Partial<Settings>, reportFailure=true) {
@@ -93,136 +104,126 @@ function saveQueue() {
   if (queueTimer) clearTimeout(queueTimer)
   queueTimer = setTimeout(() => { queueTimer = null; void queueStore.write(player.saved()).catch(() => notice('播放队列保存失败。')) }, 500)
 }
-function authChange<T>(operation: () => Promise<T>): Promise<T> {
-  const result = authChanges.catch(() => {}).then(operation)
-  authChanges = result.catch(() => {})
+function authChange<T>(provider: ProviderId, operation: () => Promise<T>): Promise<T> {
+  const result = authChanges[provider].catch(() => {}).then(operation)
+  authChanges[provider] = result.catch(() => {})
   return result
 }
-function cancelAuthentication() {
-  loginAttempt++
-  loginProvider = null
-  const flow = pendingQr
-  pendingQr = null
-  return flow ? backend.call('auth.qrCancel', { key: flow.backendKey, provider: flow.provider }).catch(() => {}) : Promise.resolve()
+function cancelAuthentication(provider: ProviderId) {
+  loginAttempt[provider]++
+  const flow = pendingQr[provider]
+  pendingQr[provider] = null
+  return flow ? backend.call('auth.qrCancel', { key: flow.backendKey, provider }).catch(() => {}) : Promise.resolve()
 }
-async function establish(cookie: string, user: User, provider: ProviderId = 'netease', attempt = loginAttempt): Promise<Session> {
-  return authChange(async () => {
-    if (attempt !== loginAttempt) throw new MusicError('SESSION_CHANGED', '本次登录已取消，请重新登录。')
-    switchingAccount = true
-    const previous = activeCredentials, previousSession = session, previousQueue = player.saved()
-    const resetQueue = sessionProvider(session) !== provider || session.user?.id !== user.id
+function canPersist() { return safeStorage.isEncryptionAvailable() && safeStorage.getSelectedStorageBackend() !== 'basic_text' }
+function persistSessions(provider: ProviderId) {
+  const records = { ...persistedSessions }, current = activeCredentials[provider]
+  if (canPersist() && current && sessions[provider].persistent) records[provider] = { encrypted: safeStorage.encryptString(current.cookie).toString('base64'), user: current.user, provider }
+  else delete records[provider]
+  persistedSessions = records
+  return sessionStore.write({ schemaVersion: 2, sessions: records })
+}
+async function establish(cookie: string, user: User, provider: ProviderId, attempt = loginAttempt[provider]): Promise<Session> {
+  return authChange(provider, async () => {
+    if (attempt !== loginAttempt[provider]) throw new MusicError('SESSION_CHANGED', '本次登录已取消，请重新登录。')
+    switchingAccounts.add(provider)
+    const previous = activeCredentials[provider], previousSession = sessions[provider]
     let backendChanged = false, committed = false
     try {
-      const epoch = ++authEpoch
-      if (resetQueue) await player.reset()
-      if (attempt !== loginAttempt) throw new MusicError('SESSION_CHANGED', '本次登录已取消，请重新登录。')
+      const epoch = ++authEpoch[provider]
       await backend.call('session.set', { cookie, user, provider, epoch })
       backendChanged = true
-      if (attempt !== loginAttempt) throw new MusicError('SESSION_CHANGED', '本次登录已取消，请重新登录。')
-      const persistent = safeStorage.isEncryptionAvailable() && safeStorage.getSelectedStorageBackend() !== 'basic_text'
-      const next: Session = { user, provider, persistent, message: persistent ? undefined : '系统密钥环不可用，登录仅在本次运行中保留。' }
-      try { await sessionStore.write(persistent ? { encrypted: safeStorage.encryptString(cookie).toString('base64'), user, provider } : null) }
-      catch { next.persistent = false; next.message = '登录成功，但会话无法保存，退出应用后需要重新登录。'; await sessionStore.remove().catch(() => {}) }
-      const nextTasks: DownloadTask[] = await backend.call('downloads.list')
-      if (attempt !== loginAttempt) throw new MusicError('SESSION_CHANGED', '本次登录已取消，请重新登录。')
-      session = next; activeCredentials = { cookie, user, provider }; tasks = nextTasks; committed = true
+      if (attempt !== loginAttempt[provider]) throw new MusicError('SESSION_CHANGED', '本次登录已取消，请重新登录。')
+      const next: Session = { user, provider, persistent: canPersist(), message: canPersist() ? undefined : '系统密钥环不可用，登录仅在本次运行中保留。' }
+      sessions[provider] = next; activeCredentials[provider] = { cookie, user, provider }; committed = true
+      if (previousSession.user && previousSession.user.id !== user.id) await player.removeProvider(provider, false)
+      try { await persistSessions(provider) } catch {
+        next.persistent = false; next.message = '登录成功，但会话无法保存，退出应用后需要重新登录。'
+        await persistSessions(provider).catch(() => {})
+      }
+      tasks = await backend.call('downloads.list')
       miniLikes.clear(); miniTrack = ''
-      send({ type: 'session', data: session }); send({ type: 'downloads', data: tasks }); send({ type: 'library', data: null })
-      return session
+      send({ type: 'session', data: { provider, session: next } }); send({ type: 'downloads', data: tasks }); send({ type: 'library', data: { provider } })
+      return next
     } catch (error) {
-      if (!committed) {
-        if (backendChanged) {
-          const epoch = ++authEpoch
-          await backend.call('session.set', previous ? { ...previous, epoch } : { provider: 'netease', cookie: '', user: null, epoch })
-          await sessionStore.write(previous && previousSession.persistent ? { encrypted: safeStorage.encryptString(previous.cookie).toString('base64'), user: previous.user, provider: previous.provider } : null).catch(() => sessionStore.remove())
-        }
-        session = previousSession; activeCredentials = previous
-        if (resetQueue) { player.restore(previousQueue); send({ type: 'player', data: player.snapshot() }); saveQueue() }
-        tasks = await backend.call('downloads.list'); send({ type: 'downloads', data: tasks })
+      if (!committed && backendChanged) {
+        await backend.call('session.set', { provider, cookie: previous?.cookie || '', user: previous?.user || null, epoch: ++authEpoch[provider] })
       }
       throw error
-    } finally { switchingAccount = false }
+    } finally { switchingAccounts.delete(provider) }
   })
 }
-async function logout(expired = false) {
-  if (clearing) return clearing
-  const cancellation = cancelAuthentication()
-  clearing = authChange(async () => {
+function logout(provider: ProviderId, expired = false): Promise<void> {
+  if (clearingAccounts[provider]) return clearingAccounts[provider]!
+  const cancellation = cancelAuthentication(provider)
+  const operation = authChange(provider, async () => {
     await cancellation
-    switchingAccount = true
+    switchingAccounts.add(provider)
     try {
-      authEpoch++
-      await player.reset()
-      await backend.call('session.clear')
-      await sessionStore.write(null).catch(() => sessionStore.remove())
-      activeCredentials = null
-      session = { user: null, provider: 'netease', persistent: false, message: expired ? '登录已失效，请重新登录。' : undefined }
-      miniLikes.clear(); miniTrack = ''; tasks = []
-      send({ type: 'session', data: session }); send({ type: 'downloads', data: [] }); send({ type: 'library', data: null })
-    } finally { switchingAccount = false }
-  }).finally(() => { clearing = null })
-  return clearing
+      await player.removeProvider(provider, false)
+      await backend.call('session.clear', { provider, epoch: ++authEpoch[provider] })
+      activeCredentials[provider] = null
+      sessions[provider] = { user: null, provider, persistent: false, message: expired ? '登录已失效，请重新登录。' : undefined }
+      await persistSessions(provider).catch(() => notice('退出状态保存失败，请检查磁盘空间。'))
+      miniLikes.clear(); miniTrack = ''; tasks = await backend.call('downloads.list')
+      send({ type: 'session', data: { provider, session: sessions[provider] } }); send({ type: 'downloads', data: tasks }); send({ type: 'library', data: { provider } })
+    } finally { switchingAccounts.delete(provider) }
+  }).finally(() => { delete clearingAccounts[provider] })
+  clearingAccounts[provider] = operation
+  return operation
+}
+function assertEnabled(provider: ProviderId) {
+  if (!isProvider(provider) || !settings.enabledProviders.includes(provider)) throw new MusicError('PLATFORM_DISABLED', '该音乐平台已关闭，请在设置中开启。')
+  if (switchingAccounts.has(provider)) throw new MusicError('SESSION_CHANGED', '正在更新此平台账号，请稍后重试。')
 }
 async function handle(command: Command, args: any): Promise<any> {
-  if (switchingAccount && /^(?:catalog\.|home\.|library\.|downloads\.|player\.(?:play|radio|dislike)$)/.test(command)) throw new MusicError('SESSION_CHANGED', '正在切换账号，请稍后重试。')
   switch (command) {
-    case 'app.bootstrap': return { session, settings, player: player.snapshot(), downloads: tasks, version: app.getVersion() } satisfies Bootstrap
+    case 'app.bootstrap': return { sessions, settings, player: player.snapshot(), downloads: tasks, version: app.getVersion() } satisfies Bootstrap
     case 'auth.qrStart': {
-      const cancellation = cancelAuthentication(), attempt = loginAttempt
-      const provider: ProviderId = args?.provider || 'netease'
-      loginProvider = provider
-      await cancellation
-      await authChanges
-      if (attempt !== loginAttempt) throw new MusicError('SESSION_CHANGED', '本次登录已取消。')
+      const provider: ProviderId = args.provider
+      const cancellation = cancelAuthentication(provider), attempt = loginAttempt[provider]
+      await cancellation; await authChanges[provider]
+      if (attempt !== loginAttempt[provider]) throw new MusicError('SESSION_CHANGED', '本次登录已取消。')
       const code = await backend.call('auth.qrStart', { provider })
-      if (attempt !== loginAttempt) {
-        // A newer request for this provider can share its in-flight QR creation.
-        if (loginProvider !== provider) void backend.call('auth.qrCancel', { provider, key: code.key }).catch(() => {})
-        throw new MusicError('SESSION_CHANGED', '本次登录已取消。')
-      }
+      if (attempt !== loginAttempt[provider]) throw new MusicError('SESSION_CHANGED', '本次登录已取消。')
       const key = randomUUID()
-      pendingQr = { key, backendKey: code.key, provider, attempt, epoch: authEpoch }
+      pendingQr[provider] = { key, backendKey: code.key, provider, attempt, epoch: authEpoch[provider] }
       return { ...code, key }
     }
     case 'auth.qrCancel': {
-      const provider = args.provider || 'netease', flow = pendingQr
-      if (flow && flow.key === args.key && flow.provider === provider) {
-        pendingQr = null; loginAttempt++; loginProvider = null
-        return backend.call(command, { key: flow.backendKey, provider })
-      }
+      const provider: ProviderId = args.provider, flow = pendingQr[provider]
+      if (flow?.key === args.key) return cancelAuthentication(provider)
       return
     }
-    case 'auth.cancel': return cancelAuthentication()
+    case 'auth.cancel': return cancelAuthentication(args.provider)
     case 'auth.qrCheck': {
-      const flow = pendingQr, provider = args.provider || 'netease'
-      if (!flow || flow.key !== args.key || flow.provider !== provider) return { state: 'expired' }
+      const provider: ProviderId = args.provider, flow = pendingQr[provider]
+      if (!flow || flow.key !== args.key) return { state: 'expired' }
       const result = await backend.call(command, { key: flow.backendKey, provider })
-      if (pendingQr !== flow || flow.attempt !== loginAttempt || flow.epoch !== authEpoch) return { state: 'expired' }
-      if (result.state === 'success') { pendingQr = null; return { state: 'success', session: await establish(result.cookie, result.user, provider, flow.attempt) } }
+      if (pendingQr[provider] !== flow || flow.attempt !== loginAttempt[provider] || flow.epoch !== authEpoch[provider]) return { state: 'expired' }
+      if (result.state === 'success') { pendingQr[provider] = null; return { state: 'success', session: await establish(result.cookie, result.user, provider, flow.attempt) } }
       return { state: result.state }
     }
     case 'auth.importCookie': {
-      const cancellation = cancelAuthentication(), attempt = loginAttempt
-      await cancellation
-      await authChanges
-      if (attempt !== loginAttempt) throw new MusicError('SESSION_CHANGED', '本次登录已取消。')
-      const provider = args.provider || 'netease'
-      const result = await backend.call(command, { ...args, provider })
+      const provider: ProviderId = args.provider
+      const cancellation = cancelAuthentication(provider), attempt = loginAttempt[provider]
+      await cancellation; await authChanges[provider]
+      if (attempt !== loginAttempt[provider]) throw new MusicError('SESSION_CHANGED', '本次登录已取消。')
+      const result = await backend.call(command, args)
       return establish(result.cookie, result.user, provider, attempt)
     }
-    case 'auth.logout': return logout()
-    case 'library.like': case 'library.subscribe': case 'library.addToPlaylist': {
-      const epoch=authEpoch, value=await backend.call(command,args)
-      if(epoch!==authEpoch) throw new MusicError('SESSION_CHANGED','账号状态已改变，请重新加载。')
-      send({type:'library',data:null}); return value
-    }
+    case 'auth.logout': return logout(args.provider)
+    case 'library.like': case 'library.subscribe': case 'library.addToPlaylist':
     case 'catalog.search': case 'catalog.detail': case 'catalog.allTracks': case 'catalog.lyrics': case 'catalog.comments': case 'catalog.artistAlbums': case 'home.section': case 'library.list': case 'library.subscription': case 'library.writablePlaylists': case 'library.diagnostics': {
-      const epoch = authEpoch
+      const provider: ProviderId = args.provider
+      assertEnabled(provider)
+      const epoch = authEpoch[provider], access = accessRevision[provider]
       const value = await backend.call(command, args)
-      if (epoch !== authEpoch) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新加载。')
+      if (epoch !== authEpoch[provider] || access !== accessRevision[provider]) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新加载。')
+      if (['library.like', 'library.subscribe', 'library.addToPlaylist'].includes(command)) send({ type: 'library', data: { provider } })
       return value
     }
-    case 'player.play': { if (args.tracks.some((track: DownloadTask['track']) => track.provider !== sessionProvider(session))) throw new MusicError('SESSION_CHANGED', '歌曲所属平台已改变，请重新选择。'); return player.play(args.tracks, args.index, args.append) }
+    case 'player.play': { for (const track of args.tracks) assertEnabled(track.provider); return player.play(args.tracks, args.index, args.append) }
     case 'player.toggle': return player.toggle()
     case 'player.next': return player.next()
     case 'player.previous': return player.previous()
@@ -233,17 +234,17 @@ async function handle(command: Command, args: any): Promise<any> {
     case 'player.device': return player.device(args.id)
     case 'player.refreshDevices': return player.refreshDevices()
     case 'player.remove': return player.remove(args.index)
-    case 'player.radio': return player.radio(args)
+    case 'player.radio': assertEnabled(args.provider); return player.radio(args)
     case 'player.dislike': return player.dislike()
     case 'downloads.add': case 'downloads.cancel': case 'downloads.retry': return backend.call(command, args)
     case 'downloads.reveal': case 'downloads.play': {
-      const epoch = authEpoch
-      const check = (task: DownloadTask) => { if (epoch !== authEpoch || switchingAccount || task.track.provider !== sessionProvider(session)) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新选择下载。') }
       const task = await backend.call<DownloadTask>('downloads.get', args)
-      check(task)
+      const provider = task.track.provider, epoch = authEpoch[provider]
+      assertEnabled(provider)
       if (task.status !== 'completed' || !task.path) throw new MusicError('FILE_UNAVAILABLE', '下载尚未完成。')
       await access(task.path)
-      check(task)
+      assertEnabled(provider)
+      if (epoch !== authEpoch[provider]) throw new MusicError('SESSION_CHANGED', '账号状态已改变，请重新选择下载。')
       if (command === 'downloads.reveal') { shell.showItemInFolder(task.path); return }
       return player.playDownload(task)
     }
@@ -251,6 +252,7 @@ async function handle(command: Command, args: any): Promise<any> {
       try {const {stdout}=await promisify(execFile)('fc-list',['--format=%{family}\n'],{timeout:2000,maxBuffer:1_000_000});return [...new Set(stdout.split(/[\n,]/).map(s=>s.trim()).filter(s=>s.length>0&&s.length<=120&&/^[\p{L}\p{N} .,_'-]+$/u.test(s)))].sort((a,b)=>a.localeCompare(b)).slice(0,600)} catch{return []}
     }
     case 'settings.update': {
+      if (args.enabledProviders) args = { ...args, enabledProviders: PLATFORM_IDS.filter(id => args.enabledProviders.includes(id)) }
       const changedMpv = args.mpvPath && args.mpvPath !== settings.mpvPath
       const previous=settings
       saveSettings(args,false)
@@ -259,6 +261,12 @@ async function handle(command: Command, args: any): Promise<any> {
         for(const key of Object.keys(args) as (keyof Settings)[]) if(settings[key]===args[key]) (restored as any)[key]=previous[key]
         settings=restored;send({type:'settings',data:settings})
         throw new MusicError('SETTINGS_SAVE','设置保存失败，已恢复原值，请检查磁盘空间。')
+      }
+      if (args.enabledProviders) {
+        const changed = PLATFORM_IDS.filter(id => previous.enabledProviders.includes(id) !== settings.enabledProviders.includes(id))
+        for (const provider of changed) accessRevision[provider]++
+        await backend.call('settings.platforms', { enabledProviders: settings.enabledProviders })
+        for (const provider of previous.enabledProviders.filter(id => !settings.enabledProviders.includes(id))) await player.removeProvider(provider)
       }
       if (changedMpv) await player.restart()
       if (args.floatingEnabled === true) createMini()
@@ -289,11 +297,13 @@ async function handle(command: Command, args: any): Promise<any> {
     case 'mini.bootstrap': await refreshMiniLike(); return miniSnapshot()
     case 'mini.close': { const card=miniWindow; setTimeout(()=>{if(card&&!card.isDestroyed())card.close()},50); return }
     case 'mini.like': {
-      const track=player.state.queue[player.state.index],epoch=authEpoch
-      if(!track || !session.user) throw new MusicError('AUTH_REQUIRED','请在主窗口登录后使用喜欢功能。')
-      await refreshMiniLike()
-      if(epoch!==authEpoch) return
-      await backend.call('library.like',{id:track.id,like:!miniLikes.has(track.id)}); send({type:'library',data:null}); return
+      const track = player.state.queue[player.state.index]
+      if (!track || !sessions[track.provider].user) throw new MusicError('AUTH_REQUIRED', '请在主窗口登录后使用喜欢功能。')
+      const provider = track.provider, epoch = authEpoch[provider]
+      assertEnabled(provider); await refreshMiniLike()
+      if (epoch !== authEpoch[provider] || player.state.queue[player.state.index] !== track) return
+      await backend.call('library.like', { provider, id: track.id, like: !miniLikes.has(trackKey(track)) })
+      send({ type: 'library', data: { provider } }); return
     }
     case 'window.state': return windowSnapshot()
     case 'window.minimize': window?.minimize(); return
@@ -312,10 +322,13 @@ async function handle(command: Command, args: any): Promise<any> {
 async function initialize() {
   const userData = app.getPath('userData'), runtime = join(userData, 'runtime')
   await mkdir(runtime, { recursive: true, mode: 0o700 })
-  const defaults: Settings = { ...experienceDefaults(), quality: 'exhigh', downloadQuality: 'exhigh', downloadDirectory: join(testMode ? userData : app.getPath('music'), 'Libitum music 下载'), deviceId: 'auto', volume: 60, theme: 'system', mpvPath: 'mpv' }
+  sessionStore = new JsonStore(join(userData, 'session.json'), null)
+  const credentials = await sessionStore.read()
+  const legacyProvider: ProviderId = credentials && 'encrypted' in credentials && credentials.provider === 'qq' ? 'qq' : 'netease'
+  const defaults: Settings = { ...experienceDefaults(), ...platformDefaults(legacyProvider), quality: 'exhigh', downloadQuality: 'exhigh', downloadDirectory: join(testMode ? userData : app.getPath('music'), 'Libitum music 下载'), deviceId: 'auto', volume: 60, theme: 'system', mpvPath: 'mpv' }
   settingsStore = new JsonStore(join(userData, 'settings.json'), defaults)
   const stored = await settingsStore.read()
-  settings = { ...defaults, ...stored, ...normalizeExperience(stored) }
+  settings = { ...defaults, ...stored, ...normalizeExperience(stored), ...normalizePlatforms(stored, legacyProvider) }
   if (!Object.hasOwn(QUALITIES, settings.quality)) settings.quality = defaults.quality
   if (!Object.hasOwn(QUALITIES, settings.downloadQuality)) settings.downloadQuality = defaults.downloadQuality
   if (!['system', 'light', 'dark'].includes(settings.theme)) settings.theme = 'system'
@@ -325,19 +338,19 @@ async function initialize() {
   if (typeof settings.downloadDirectory !== 'string' || !settings.downloadDirectory.startsWith('/')) settings.downloadDirectory = defaults.downloadDirectory
   if (typeof settings.mpvPath !== 'string' || !(settings.mpvPath === 'mpv' || settings.mpvPath.startsWith('/'))) settings.mpvPath = 'mpv'
   queueStore = new JsonStore<SavedQueue>(join(userData, 'queue.json'), { queue: [], index: -1, position: 0, repeat: 'list' })
-  sessionStore = new JsonStore(join(userData, 'session.json'), null)
   backend = new WorkerBackend()
-  backend.on('credentials',data=>{
-    if(data.epoch!==authEpoch || data.provider!==sessionProvider(session) || data.user?.id!==session.user?.id || !session.user || clearing || switchingAccount) return
-    activeCredentials = { cookie: data.cookie, user: session.user, provider: sessionProvider(session) }
-    if(session.persistent && safeStorage.isEncryptionAvailable() && safeStorage.getSelectedStorageBackend()!=='basic_text') void sessionStore.write({encrypted:safeStorage.encryptString(data.cookie).toString('base64'),user:session.user,provider:sessionProvider(session)}).catch(()=>notice('会话更新保存失败。'))
+  backend.on('credentials', data => {
+    const provider: ProviderId = data.provider
+    if (!isProvider(provider) || data.epoch !== authEpoch[provider] || data.user?.id !== sessions[provider].user?.id || !sessions[provider].user || switchingAccounts.has(provider)) return
+    activeCredentials[provider] = { cookie: data.cookie, user: sessions[provider].user!, provider }
+    void persistSessions(provider).catch(() => notice('会话更新保存失败。'))
   })
-  backend.on('downloads', data => { if (switchingAccount) return; tasks = data; send({ type: 'downloads', data }) })
+  backend.on('downloads', data => { tasks = data; send({ type: 'downloads', data }) })
   backend.on('notice', notice)
-  backend.on('expired', data => { if (session.user && data?.epoch === authEpoch && data.provider === sessionProvider(session)) void logout(true).catch(() => notice('登录失效，请重新启动应用后登录。')) })
+  backend.on('expired', data => { const provider: unknown = data?.provider; if (isProvider(provider) && sessions[provider].user && data.epoch === authEpoch[provider]) void logout(provider, true).catch(() => notice('登录失效，请重新登录。')) })
   backend.on('failed', () => { notice('音乐后台已退出，请重新启动应用。'); void player.stop(false) })
   backend.start(runtime)
-  await backend.call('init', { userData, directory: settings.downloadDirectory, testMode, testUrl: testMode ? process.env.CLOUD_MUSIC_TEST_URL : undefined, testQrScenario: testMode ? process.env.CLOUD_MUSIC_TEST_QR : undefined })
+  await backend.call('init', { enabledProviders: settings.enabledProviders, userData, directory: settings.downloadDirectory, testMode, testUrl: testMode ? process.env.CLOUD_MUSIC_TEST_URL : undefined, testQrScenario: testMode ? process.env.CLOUD_MUSIC_TEST_QR : undefined })
   player = new Player(new Mpv(runtime, () => settings.mpvPath, testMode), backend, settings, data => send({ type: 'player', data }), saveQueue, saveSettings)
   visualizer=new SpectrumService(data=>send({type:'spectrum',data}))
   media=new MediaLibrary(join(userData,'media'),data=>send({type:'mediaImport',data}),async wallpaper=>{
@@ -347,19 +360,25 @@ async function initialize() {
     if(previous) await media.remove(previous.id)
   })
   const saved = await queueStore.read()
-  const credentials = await sessionStore.read()
-  let restoring: { cookie: string; user: User; provider: ProviderId } | null = null
-  if (credentials && safeStorage.isEncryptionAvailable() && safeStorage.getSelectedStorageBackend() !== 'basic_text') {
+  const restoring: { cookie: string; user: User; provider: ProviderId }[] = []
+  const records = sessionRecords(credentials)
+  persistedSessions = records
+  if (canPersist()) for (const provider of PLATFORM_IDS) {
+    const record = records[provider]
+    if (!record || typeof record.encrypted !== 'string' || !record.user?.id) continue
     try {
-      const cookie = safeStorage.decryptString(Buffer.from(credentials.encrypted, 'base64'))
-      const provider = credentials.provider === 'qq' ? 'qq' : 'netease'
-      await backend.call('session.set', { cookie, user: credentials.user, provider, epoch:authEpoch })
-      session = { user: credentials.user, provider, persistent: true, message: '正在验证登录状态…' }
-      restoring = { cookie, user: credentials.user, provider }
-      activeCredentials = restoring
-    } catch { await sessionStore.remove(); session.message = '上次登录无法恢复，请重新登录。' }
+      const cookie = safeStorage.decryptString(Buffer.from(record.encrypted, 'base64'))
+      await backend.call('session.set', { cookie, user: record.user, provider, epoch: authEpoch[provider] })
+      sessions[provider] = { user: record.user, provider, persistent: true, message: '正在验证登录状态…' }
+      const restored = { cookie, user: record.user, provider }
+      restoring.push(restored); activeCredentials[provider] = restored
+    } catch { sessions[provider].message = '上次登录无法恢复，请重新登录。' }
   }
-  if (saved && Array.isArray(saved.queue) && saved.queue.every(isTrack) && saved.queue.every(track => track.provider === sessionProvider(session))) player.restore(saved)
+  if (saved && Array.isArray(saved.queue) && saved.queue.every(isTrack)) {
+    const current = saved.queue[saved.index]
+    const queue = saved.queue.filter(track => settings.enabledProviders.includes(track.provider))
+    player.restore({ ...saved, queue, index: current ? queue.indexOf(current) : -1 })
+  }
   ipcMain.handle('music:invoke', async (event, command: unknown, args: unknown) => {
     try {
       const main=!!window && event.sender===window.webContents && event.senderFrame===window.webContents.mainFrame
@@ -386,14 +405,16 @@ async function initialize() {
   createWindow()
   if(settings.floatingEnabled) createMini()
   void player.initialize()
-  if (restoring) {
-    const epoch = authEpoch, attempt = loginAttempt, savedSession = restoring
-    void backend.call('auth.importCookie', { cookie: savedSession.cookie, provider: savedSession.provider }).then(async result => {
-      if (epoch === authEpoch && attempt === loginAttempt) await establish(result.cookie, result.user, savedSession.provider, attempt)
+  for (const savedSession of restoring) {
+    const provider = savedSession.provider
+    if (!settings.enabledProviders.includes(provider)) continue
+    const epoch = authEpoch[provider], attempt = loginAttempt[provider]
+    void backend.call('auth.importCookie', { cookie: savedSession.cookie, provider }).then(async result => {
+      if (epoch === authEpoch[provider] && attempt === loginAttempt[provider]) await establish(result.cookie, result.user, provider, attempt)
     }).catch(async error => {
-      if (epoch !== authEpoch || attempt !== loginAttempt) return
-      if (error instanceof MusicError && error.code === 'AUTH_EXPIRED') await logout(true)
-      else { session = { ...session, message: '暂时无法验证登录，已保留本机会话；联网后可重试。' }; send({ type: 'session', data: session }) }
+      if (epoch !== authEpoch[provider] || attempt !== loginAttempt[provider]) return
+      if (error instanceof MusicError && error.code === 'AUTH_EXPIRED') await logout(provider, true)
+      else { sessions[provider] = { ...sessions[provider], message: '暂时无法验证登录，已保留本机会话；联网后可重试。' }; send({ type: 'session', data: { provider, session: sessions[provider] } }) }
     }).catch(() => notice('登录状态恢复失败，请重新登录。'))
   }
   const checkpoint = setInterval(() => { void queueStore.write(player.saved()).catch(() => {}) }, 10000)
