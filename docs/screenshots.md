@@ -1,29 +1,31 @@
 # 项目截图
 
-[返回 README](../README.md) · [开发指南](development.md)
+[返回 README](../README.md) · [使用指南](user-guide.md) · [开发指南](development.md)
 
-README 中的 PNG 均直接截取自本项目构建后的 Electron 应用界面，没有重绘界面、拼接控件或替换显示内容。播放详情与 PEQ 截图反映当前源码，包含本地预览中的新标题栏；具体下载版本请查看发布页。
+本页七张 PNG 均直接截取自当前源码构建的 Electron 应用，没有重绘界面、拼接控件或替换显示内容。所有页面只使用项目内置的合成账号、曲目、歌单与评论，不展示真实账号、头像、个人歌单、下载记录或音乐文件。
 
 ## 内容来源
 
 | 文件 | 展示内容 | 数据来源 |
 | --- | --- | --- |
-| [home.png](images/home.png) | 浅色首页、每日推荐入口、音乐漫游和精选歌单 | 临时空资料目录，未登录；应用正常读取网易云公开推荐。封面与歌单名称可能随服务更新。 |
-| [listening.png](images/listening.png) | 深色播放详情、大封面和独立评论面板 | 项目自带的隔离测试曲目“晚风经过”、合成听众及示例评论；音频为脚本临时生成的静音 WAV。 |
-| [equalizer.png](images/equalizer.png) | 十段参数均衡器与前级 | 同一隔离示例会话；通过实际设置界面修改并应用示例参数，不是耳机校准建议。 |
-| [mini-player.png](images/mini-player.png) | 独立悬浮播放卡片 | 同一示例曲目和实际播放进度，独立 Electron 窗口。 |
+| [home.png](images/home.png) | 浅色首页、每日推荐入口、音乐漫游和精选歌单 | 未登录的隔离示例会话；推荐与封面占位图均为合成数据，不请求公开音乐目录。 |
+| [platform-accounts.png](images/platform-accounts.png) | 两端启用开关、同时登录及各自账号操作 | 内置“测试听众”与“QQ测试听众”，没有真实头像或账号标识。密钥环不可用提示保留实际状态。 |
+| [search-netease.png](images/search-netease.png) | “晚风”在网易云音乐端的搜索结果 | 内置示例曲目与歌手，底部保留同一首示例歌曲。 |
+| [search-qq.png](images/search-qq.png) | 同一关键词切换到 QQ 音乐结果 | QQ 内置示例曲目与歌手，切换后底部歌曲不变。 |
+| [listening.png](images/listening.png) | 深色播放详情、大封面和独立评论面板 | 合成曲目“晚风经过”、合成听众与示例评论；音频是脚本临时生成的静音 WAV。 |
+| [equalizer.png](images/equalizer.png) | 十段参数均衡器与前级 | 同一示例会话，通过真实界面修改并应用示例参数，不是耳机校准建议。 |
+| [mini-player.png](images/mini-player.png) | 独立悬浮播放卡片 | 同一示例曲目和真实播放器进度，独立 Electron 窗口。 |
 
-示例账号与曲目定义在 [`src/main/test-fixtures.ts`](../src/main/test-fixtures.ts)。这些画面展示应用交互，不代表真实账号的收藏同步、会员权限、硬件音频或桌面窗口置顶已完成验收；验证边界见 [VALIDATION.md](../VALIDATION.md)。公开推荐中的封面和内容来自网易云服务，相关权利归原权利人所有。
+示例定义见 [`test-fixtures.ts`](../src/main/test-fixtures.ts) 与 [`qqmusic-fixtures.ts`](../src/main/qqmusic-fixtures.ts)。画面仅展示交互，不代表真实账号权限、同步或硬件验收已完成；边界见[验证记录](../VALIDATION.md)。
 
 ## 拍摄环境
 
-- 日期：2026-11-01。
-- Ubuntu 22.04.5 LTS x86_64，Node.js 24，项目锁定的 Electron 45.2.1。
-- 使用生产构建的 main / preload / renderer，以 Electron 无头模式截取应用内容区。
-- 首页与播放详情窗口为 1440 × 940，PEQ 为 1440 × 1100，悬浮卡片为 280 × 64；截图不包含系统窗口装饰。
-- 明确设置浅色或深色主题，使用系统字体与应用原有样式。
+- 日期：2026-11-02。
+- 使用项目锁定的 Electron 45.2.1 与生产构建的 main / preload / renderer，以无头模式拍摄应用内容区。
+- 首页、播放详情及搜索为 1440 × 940，账号卡片和 PEQ 为 1440 × 1100，悬浮卡片为 280 × 64；截图不包含系统窗口装饰。
+- 使用应用原有样式和系统字体，明确选择浅色或深色主题；不启用频谱采集。
 
-## 更新截图
+## 复现截图
 
 准备好[开发环境](development.md)，再执行：
 
@@ -32,14 +34,12 @@ npm ci
 # 若 Electron 二进制尚未安装：
 node node_modules/electron/install.js
 npm run build
-node scripts/capture-readme.cjs --public-home
+node scripts/capture-readme.cjs
 npm run audit:release
 ```
 
-`--public-home` 会先启动未登录的正常应用，等公开推荐和封面加载完成后截取首页；这一阶段需要网络，不会登录或播放真实歌曲。随后启动独立的示例会话，截取播放详情、PEQ 和悬浮卡片。更新另外三张图而保留首页时，可省略该参数；仅更新卡片可使用 `node scripts/capture-readme.cjs --mini-only`。
+默认命令会拍摄全部七张合成示例图；`--mini-only` 仅更新卡片。旧的 `--public-home` 选项可额外请求未登录的真实公开首页，但本页此次图片没有使用该选项。
 
-脚本仅使用新建的临时资料目录，不读取已有配置、Cookie、历史、下载或私人媒体；结束后关闭应用并删除临时目录。示例音频由本地临时 HTTP 服务提供，mpv 在测试模式中使用空输出，不播放到硬件。此流程不启用频谱采集。
+脚本只使用新建临时资料目录，不读取已有配置、Cookie、历史、下载或私人媒体；结束后关闭应用并删除临时目录。示例音频由本地临时 HTTP 服务提供，mpv 使用空输出，不播放到硬件。截图参数中的 `--no-sandbox` 仅用于这次隔离无头流程，日常运行使用 README 中的命令。
 
-截图脚本沿用隔离 Electron 流程的无头启动参数，其中 `--no-sandbox` 仅用于这次临时截图过程，普通安装与日常启动请使用 README 中的命令。
-
-四个 PNG 是专门审核的公开文档资源，在 `.gitignore` 和发布审计中按文件名放行。测试截图、运行日志、个人媒体和账号数据仍保持忽略；文档截图不会打入 AppImage 或 DEB。
+七个 PNG 按文件名在 `.gitignore` 与发布审计中放行；其他图片、运行日志和账号数据仍保持忽略。DEB 将这些公开文档与图片放在离线文档目录，AppImage 不包含文档截图，应用运行时也不加载它们。

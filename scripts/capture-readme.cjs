@@ -75,7 +75,11 @@ async function main() {
     const fixtureApp = await launch(path.join(directory, 'fixture'), true, `http://127.0.0.1:${server.address().port}/sample.wav`)
     instance = fixtureApp.instance
     const page = fixtureApp.page
-    await invoke(page, 'auth.importCookie', { cookie: 'MUSIC_U=fixture' })
+    if (!process.argv.includes('--public-home') && !process.argv.includes('--mini-only')) {
+      await expect(page.locator('.home-module').first().locator('.collection-card').first()).toBeVisible()
+      await shot(page, 'home.png')
+    }
+    await invoke(page, 'auth.importCookie', { provider: 'netease', cookie: 'MUSIC_U=fixture' })
     await expect.poll(async () => (await invoke(page, 'app.bootstrap')).player.available).toBe(true)
     await page.getByLabel('搜索音乐').fill('晚风')
     await page.getByLabel('搜索音乐').press('Enter')
@@ -111,6 +115,26 @@ async function main() {
     const card = instance.windows().find(window => window !== page)
     await expect(card.locator('.mini-player')).toBeVisible()
     await shot(card, 'mini-player.png')
+
+    if (!process.argv.includes('--mini-only')) {
+      await invoke(page, 'settings.update', { floatingEnabled: false, enabledProviders: ['netease', 'qq'] })
+      await invoke(page, 'auth.importCookie', { provider: 'qq', cookie: 'qqmusic_session=fixture-qq-session' })
+      await page.getByRole('button', { name: '账号与隐私', exact: true }).click()
+      await expect(page.getByRole('region', { name: '网易云音乐账号', exact: true }).getByText('测试听众', { exact: true })).toBeVisible()
+      await expect(page.getByRole('region', { name: 'QQ音乐账号', exact: true }).getByText('QQ测试听众', { exact: true })).toBeVisible()
+      await page.locator('.content-scroll').evaluate(element => element.scrollTo({ top: 0, behavior: 'instant' }))
+      await expect(page.locator('.toast')).toHaveCount(0, { timeout: 10000 })
+      await shot(page, 'platform-accounts.png')
+
+      await instance.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 940))
+      await page.getByLabel('搜索音乐', { exact: true }).fill('晚风')
+      await page.getByLabel('搜索音乐', { exact: true }).press('Enter')
+      for (const [platform, name, title] of [['网易云音乐', 'search-netease.png', '播放 晚风经过'], ['QQ音乐', 'search-qq.png', '播放 QQ晚风经过']]) {
+        await page.getByRole('tablist', { name: '音乐平台', exact: true }).getByRole('tab', { name: platform, exact: true }).click()
+        await expect(page.getByRole('button', { name: title, exact: true })).toBeVisible()
+        await shot(page, name)
+      }
+    }
   } finally {
     if (instance) await instance.close()
     if (server) await new Promise(resolve => server.close(resolve))

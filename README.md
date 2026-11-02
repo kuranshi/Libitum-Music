@@ -4,7 +4,7 @@
   <p><strong>让生活，有声有色。</strong></p>
   <p>一个简洁的 Linux 音乐空间。发现喜欢的旋律，也让每一次聆听更合心意。</p>
   <p>
-    <a href="https://github.com/kuranshi/Libitum-Music/releases/tag/v0.2.0-rc.3"><img src="https://img.shields.io/badge/preview-v0.2.0--rc.3-ea708b" alt="预发布 v0.2.0-rc.3"></a>
+    <a href="https://github.com/kuranshi/Libitum-Music/releases/tag/v0.2.0-rc.3"><img src="https://img.shields.io/badge/preview-v0.2.0--rc.3-ea708b" alt="已发布 v0.2.0-rc.3"></a>
     <a href="#下载与安装"><img src="https://img.shields.io/badge/Ubuntu-22.04%20%7C%2024.04-E95420?logo=ubuntu&amp;logoColor=white" alt="Ubuntu 22.04 / 24.04"></a>
     <a href="#兼容范围"><img src="https://img.shields.io/badge/architecture-x86__64-64748b" alt="x86_64"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5885d1" alt="MIT 许可证"></a>
@@ -24,11 +24,9 @@ Libitum music 是面向 Linux 的中文网易云音乐与 QQ 音乐桌面客户�
 
 **双平台同时登录：** 在“设置 → 账号与隐私”分别开启网易云音乐和 QQ 音乐，至少保留一个。两端可同时保存账号；都开启时，各音乐页面及搜索结果上方提供平台切换，并分别记忆选择。浏览切换不会打断音乐，播放队列可混合两端歌曲，下载按平台分开显示。关闭平台保留登录及下载记录。QQ 使用 **QQ 音乐 App** 扫码，详见[双平台使用说明](docs/user-guide.md#选择音乐平台)。
 
-> 双端同时登录与 QQ 音乐接入是当前开发分支及本地预览包新增功能，现有 `v0.2.0-rc.3` 下载包不包含此功能；体验该功能请[从源码运行](#从源码运行)或自行构建安装包。
+> **源码与发布包：** 当前 `main` 源码包含双端同时登录、分页面切换和 QQ 搜索／播放修复。已发布的 `v0.2.0-rc.3` 不含双平台功能；体验本页新增交互请[从源码运行](#从源码运行)或自行构建。真实账号权限、同步与硬件兼容的检查范围见[验证记录](VALIDATION.md)。
 
-> **当前为预发布候选版 `v0.2.0-rc.3`**，应用与安装包内部版本为 `0.2.0`。欢迎体验并反馈问题。账号同步与硬件兼容性仍在持续验证，已完成的检查和适用范围见[验证记录](VALIDATION.md)。
-
-> **源码预览**：当前源码与本地预览包新增壁纸一体的窄标题栏和高对比窗口按钮，音质信息集中在右下角。下载页所列的 rc.3 仍为已发布版本。
+> 本页配图对应当前源码，包含壁纸一体标题栏与右下角音质信息；发布包与源码的功能范围请分别查看更新日志。
 
 ## 为日常聆听准备
 
@@ -44,6 +42,18 @@ Libitum music 是面向 Linux 的中文网易云音乐与 QQ 音乐桌面客户�
 播放、音质和下载取决于账号权限及歌曲版权；不提供跨平台替代音源或权限绕过。
 
 ## 界面预览
+
+### 两个平台，分别管理与浏览
+
+在账号设置同时开启并登录两端，关闭开关仍保留登录。下图“测试听众”与“QQ测试听众”是程序内置合成账号。
+
+![双平台账号设置：独立开关与合成登录状态](docs/images/platform-accounts.png)
+
+同一个关键词可切换查看两端结果，各自保留分页；底部播放栏继续显示正在播放歌曲的来源。
+
+![网易云音乐搜索结果，使用合成曲目](docs/images/search-netease.png)
+
+![相同关键词的 QQ 音乐搜索结果，使用合成曲目](docs/images/search-qq.png)
 
 ### 专注聆听，也读懂歌词里的故事
 
@@ -65,11 +75,11 @@ Libitum music 是面向 Linux 的中文网易云音乐与 QQ 音乐桌面客户�
   <img src="docs/images/mini-player.png" width="280" alt="Libitum music 独立悬浮播放卡片">
 </p>
 
-<sub>以上均为本项目实际运行截图。首页使用未登录的公开推荐；播放详情、PEQ 与卡片使用隔离的合成示例曲目，不包含私人账号或音乐文件。截图来源与复现方式见<a href="docs/screenshots.md">截图说明</a>。</sub>
+<sub>以上均为本项目实际运行截图。所有画面均使用隔离的合成账号、歌单、曲目与评论；不包含真实账号、头像、个人歌单、下载或音乐文件。截图来源与复现方式见<a href="docs/screenshots.md">截图说明</a>。</sub>
 
 ## 下载与安装
 
-在 [v0.2.0-rc.3 下载页](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.2.0-rc.3)展开 **Assets**，选择安装包。`Source code.zip` 是源码。
+已发布版本请在 [v0.2.0-rc.3 下载页](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.2.0-rc.3)展开 **Assets**，选择安装包。`Source code.zip` 是源码。该发布包不含本页双端同时登录功能；当前 `main` 源码版本为 `0.3.0-rc.1`，可按下方命令自行构建。
 
 | 格式 | 文件 | 适用场景 |
 | --- | --- | --- |
@@ -86,13 +96,7 @@ sudo apt install ./libitum-music-0.2.0-amd64.deb
 cloud-music-player
 ```
 
-升级前通过“退出应用”完全退出客户端。已安装内部版本同为 `0.2.0` 的候选包时，使用：
-
-```bash
-sudo apt install --reinstall ./libitum-music-0.2.0-amd64.deb
-```
-
-内部包名仍为 `cloud-music-player`，升级保留本机设置、队列和下载。
+升级前通过“退出应用”完全退出客户端，再运行上述安装命令。同版本覆盖安装可添加 `--reinstall`。内部包名仍为 `cloud-music-player`，升级保留本机设置、队列和下载。
 
 <details>
 <summary><strong>AppImage 安装与文件校验</strong></summary>
@@ -133,7 +137,7 @@ sha256sum -c SHA256SUMS --ignore-missing
 准备 **Node.js 24**、npm，以及系统组件 `mpv`、`ffmpeg` 和 `pulseaudio-utils`：
 
 ```bash
-git clone https://github.com/kuranshi/Libitum-Music.git
+git clone --branch main https://github.com/kuranshi/Libitum-Music.git
 cd Libitum-Music
 npm ci
 npm run dev
@@ -147,6 +151,8 @@ npm test            # 单元测试
 npm run test:e2e    # Electron 流程检查
 npm run package     # 生成 AppImage 与 DEB，输出到 release/
 ```
+
+当前源码构建的文件名为 `libitum-music-0.3.0-rc.1-amd64.deb` 和 `libitum-music-0.3.0-rc.1-x86_64.AppImage`，安装时使用实际文件名。
 
 更多集成检查、Ubuntu 22.04 兼容检查和发布审计见[开发指南](docs/development.md)。
 

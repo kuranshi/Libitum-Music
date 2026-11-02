@@ -1,6 +1,6 @@
 {
   "name": "cloud-music-player",
-  "version": "0.2.0",
+  "version": "0.3.0-rc.1",
   "description": "Libitum music · Linux 网易云音乐与 QQ 音乐桌面客户端",
   "main": "out/main/index.js",
   "desktopName": "cloud-music-player.desktop",
@@ -55,7 +55,7 @@
         "entry": {
           "Name": "Libitum music",
           "Comment": "网易云音乐与 QQ 音乐桌面客户端",
-          "Keywords": "Music;NetEase;QQMusic;Audio;"
+          "Keywords": "Music;NetEase;QQ;Audio;"
         }
       },
       "artifactName": "libitum-music-${version}-${arch}.${ext}"

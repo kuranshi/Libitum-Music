@@ -234,12 +234,12 @@ test('offers optional wallpaper ink analysis and custom colors and installed fon
     await page.getByRole('button',{name:'发现音乐',exact:true}).click()
     await expect(page.locator('.collection-card').first()).toBeVisible()
     expect(await page.locator('.sidebar').evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
-    const ratios=await page.locator('.sidebar .nav-item,.section-heading h2,.collection-card strong,.collection-card>span').evaluateAll((elements,under)=>{
+    const ratios=()=>page.locator('.sidebar .nav-item,.section-heading h2,.collection-card strong,.collection-card>span').evaluateAll((elements,under)=>{
       const bg=[under,under,under]
       const lum=(v:number[])=>v.map(n=>n/255).map(n=>n<=.04045?n/12.92:((n+.055)/1.055)**2.4).reduce((a,c,i)=>a+c*[.2126,.7152,.0722][i],0)
       return elements.map(e=>{const fg=getComputedStyle(e).color.match(/[\d.]+/g)!.slice(0,3).map(Number),a=lum(fg),b=lum(bg);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05)})
     },color==='black'?0:255)
-    expect(Math.min(...ratios)).toBeGreaterThanOrEqual(4.5)
+    await expect.poll(async()=>Math.min(...await ratios())).toBeGreaterThanOrEqual(4.5)
     await page.screenshot({path:`test-results/wallpaper-auto-${color}.png`,animations:'disabled'})
     await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('button',{name:'外观与播放页',exact:true}).click()
   }
