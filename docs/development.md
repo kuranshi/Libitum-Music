@@ -122,7 +122,7 @@ LIBITUM_QQ_QR_SMOKE=1 npx vitest run tests/unit/qqmusic.test.ts
 
 完整账号验收请使用自己的账号在应用内登录完成：收藏及取消一个歌单、一个专辑，在官方客户端核对，再重启检查状态。不要将真实凭证写入自动化脚本或测试样例。模拟收藏流程通过不证明服务端权限、风控或真实同步已通过验收。
 
-当前 `main` 源码版本为 `0.3.0-rc.1`，该版本尚未创建 Release；现有公开安装包为 `v0.2.0-rc.3`。发布状态与实际验证范围应同时核对[更新日志](../CHANGELOG.md)、验证记录与 Releases。
+当前预发布版本为 [`v0.3.0-rc.1`](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.3.0-rc.1)，由 `main` 构建。发布状态与实际验证范围应同时核对[更新日志](../CHANGELOG.md)、验证记录与 Releases。
 
 ### Ubuntu 22.04 隔离兼容
 

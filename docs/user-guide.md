@@ -48,9 +48,9 @@ QQ 不支持的功能不会改用网易云内容。播放或下载始终受对�
 
 ## 安装与升级
 
-当前 `main` 源码版本为 `0.3.0-rc.1`，包含本页双平台功能，需要自行构建。已发布版本为 [`v0.2.0-rc.3`](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.2.0-rc.3)，不含双平台功能。在发布页的 **Assets** 中下载安装包；`Source code.zip` 是源码。这是供体验和反馈的预发布版本，真实账号权限、同步及硬件兼容的验证范围见[验证记录](../VALIDATION.md)。
+当前预发布版本为 [`v0.3.0-rc.1`](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.3.0-rc.1)，包含本页双端同时登录与分页面切换功能。在发布页的 **Assets** 中下载安装包；`Source code.zip` 是源码。这是供体验和反馈的预发布版本，真实账号权限、同步及硬件兼容的验证范围见[验证记录](../VALIDATION.md)。
 
-下方安装命令使用已发布包的文件名；自行构建当前源码后，应改用 `libitum-music-0.3.0-rc.1-amd64.deb` 或 `libitum-music-0.3.0-rc.1-x86_64.AppImage`。
+应用版本为 `0.3.0-rc.1`，Debian 控制版本为 `0.3.0~rc.1`；从旧版升级可直接使用下方 apt 安装命令，同版本覆盖可添加 `--reinstall`。
 
 ### Ubuntu：推荐 .deb
 
@@ -58,7 +58,7 @@ QQ 不支持的功能不会改用网易云内容。播放或下载始终受对�
 
 ```bash
 sudo apt update
-sudo apt install ./libitum-music-0.2.0-amd64.deb
+sudo apt install ./libitum-music-0.3.0-rc.1-amd64.deb
 cloud-music-player
 ```
 
@@ -68,13 +68,13 @@ cloud-music-player
 
 ### AppImage
 
-下载 `libitum-music-0.2.0-x86_64.AppImage`。Ubuntu 24.04 可运行：
+下载 `libitum-music-0.3.0-rc.1-x86_64.AppImage`。Ubuntu 24.04 可运行：
 
 ```bash
 sudo apt update
 sudo apt install mpv ffmpeg pulseaudio-utils libsecret-1-0 libfuse2t64
-chmod +x ./libitum-music-0.2.0-x86_64.AppImage
-./libitum-music-0.2.0-x86_64.AppImage
+chmod +x ./libitum-music-0.3.0-rc.1-x86_64.AppImage
+./libitum-music-0.3.0-rc.1-x86_64.AppImage
 ```
 
 Ubuntu 22.04 请把 `libfuse2t64` 替换为 `libfuse2`。FUSE 2 与 FUSE 3 可以共存，无需卸载桌面正在使用的 FUSE 3。参见 [AppImage 的 FUSE 说明](https://docs.appimage.org/user-guide/troubleshooting/fuse.html)。
