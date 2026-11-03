@@ -37,6 +37,7 @@ async function launch(directory, fixture, audioUrl) {
 
 async function shot(page, name) {
   if (process.argv.includes('--mini-only') && name !== 'mini-player.png') return
+  if (process.argv.includes('--equalizer-only') && name !== 'equalizer.png') return
   await page.evaluate(() => document.fonts.ready)
   await page.mouse.move(0, 0)
   await page.screenshot({ path: path.join(images, name), animations: 'disabled' })
@@ -98,16 +99,20 @@ async function main() {
     await page.getByRole('button', { name: '音效', exact: true }).click()
     await page.getByLabel('启用十段 PEQ', { exact: true }).check()
     await page.getByLabel('PEQ 前级增益', { exact: true }).fill('-4')
+    await page.getByText('精确参数 · 全部十段', { exact: true }).click()
     await page.getByLabel('第 1 段类型', { exact: true }).selectOption('LS')
+    await page.getByLabel('第 1 段频率', { exact: true }).fill('105')
     await page.getByLabel('第 1 段增益', { exact: true }).fill('3')
     await page.getByLabel('第 5 段增益', { exact: true }).fill('-2')
     await page.getByLabel('第 9 段增益', { exact: true }).fill('2')
+    await page.getByText('精确参数 · 全部十段', { exact: true }).click()
     await page.getByRole('button', { name: '应用 PEQ', exact: true }).click()
     await expect.poll(async () => (await invoke(page, 'app.bootstrap')).settings.peq.enabled).toBe(true)
     await expect(page.locator('.toast')).toHaveCount(0, { timeout: 10000 })
-    await instance.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 1100))
+    await instance.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 1400))
     await page.locator('.content-scroll').evaluate(element => element.scrollTo({ top: 0, behavior: 'instant' }))
     await expect(page.getByRole('heading', { name: '设置', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '应用 PEQ', exact: true })).toBeInViewport()
     await shot(page, 'equalizer.png')
 
     await invoke(page, 'settings.update', { floatingEnabled: true })
@@ -117,6 +122,7 @@ async function main() {
     await shot(card, 'mini-player.png')
 
     if (!process.argv.includes('--mini-only')) {
+      await instance.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1440, 1100))
       await invoke(page, 'settings.update', { floatingEnabled: false, enabledProviders: ['netease', 'qq'] })
       await invoke(page, 'auth.importCookie', { provider: 'qq', cookie: 'qqmusic_session=fixture-qq-session' })
       await page.getByRole('button', { name: '账号与隐私', exact: true }).click()

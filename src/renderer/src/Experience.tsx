@@ -1,10 +1,11 @@
 import { trackKey } from '../../shared/platforms'
 import {WallpaperBackground} from './WallpaperBackground'
 import { useEffect, useRef, useState } from 'react'
-import { Check, Heart, ListPlus, LoaderCircle, MessageCircle, SlidersHorizontal, Waves, Palette, X } from 'lucide-react'
+import { Heart, ListPlus, LoaderCircle, MessageCircle, SlidersHorizontal, Waves, Palette, X } from 'lucide-react'
 import { type WallpaperPalette } from '../../shared/wallpaper-palette'
-import type { PeqSettings, SpectrumFrame } from '../../shared/types'
-import { defaultPeq, validPeq } from '../../shared/peq'
+import type { SpectrumFrame } from '../../shared/types'
+import { PeqEditor } from './PeqEditor'
+export { PeqEditor } from './PeqEditor'
 import { Busy, Cover, Empty, ErrorState, IconButton, Modal, Pagination } from './components'
 import { BlurControls } from './VisualControls'
 import {SynchronizedLyrics} from './SynchronizedLyrics'
@@ -14,14 +15,6 @@ export function Background({playerPage=false,onPalette}:{playerPage?:boolean;onP
   const { provider, session, data } = useApp(),settings=data.settings
   const active=settings.visualMode==='wallpaper'&&!!settings.wallpaper&&(settings.wallpaperScope==='app'||playerPage)
   return <WallpaperBackground settings={settings} status={data.player.status} active={active} onPalette={onPalette}/>
-}
-export function PeqEditor() {
-  const { provider, session, data,act } = useApp(),[draft,setDraft]=useState<PeqSettings>(()=>structuredClone(data.settings.peq)),[busy,setBusy]=useState(false),[error,setError]=useState(''),[imported,setImported]=useState(false)
-  useEffect(()=>{setDraft(structuredClone(data.settings.peq));setImported(false)},[data.settings.peq])
-  const apply=async()=>{setBusy(true);setError('');try{await request('peq.apply',draft);setImported(false)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  const read=async()=>{setBusy(true);setError('');try{const preset=await request('peq.import');if(preset){setDraft(preset);setImported(true)}}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
-  const change=(index:number,key:string,value:unknown)=>setDraft(d=>({...d,bands:d.bands.map((b,i)=>i===index?{...b,[key]:value}:b)}))
-  return <div className="peq-editor"><div className="peq-top"><label className="toggle-label"><input type="checkbox" checked={draft.enabled} onChange={e=>setDraft({...draft,enabled:e.target.checked})}/>启用十段 PEQ</label><label>前级增益 <input className="input numeric" aria-label="PEQ 前级增益" type="number" min="-30" max="12" step="0.1" value={draft.preamp} onChange={e=>setDraft({...draft,preamp:Number(e.target.value)})}/> dB</label></div><p className="muted small-text">修改后点击应用，无需重新播放。频率 20–20000 Hz，增益 ±24 dB，Q 0.1–20。</p>{imported&&<div className="info-note">已载入预览，尚未应用到播放。</div>}<div className="peq-table"><div className="peq-row peq-heading"><span>启用</span><span>类型</span><span>频率 Hz</span><span>增益 dB</span><span>Q</span></div>{draft.bands.map((band,index)=><div className="peq-row" key={index}><label><input type="checkbox" aria-label={`启用第 ${index+1} 段`} checked={band.enabled} onChange={e=>change(index,'enabled',e.target.checked)}/><span>{index+1}</span></label><select className="select" aria-label={`第 ${index+1} 段类型`} value={band.type} onChange={e=>change(index,'type',e.target.value)}><option value="PK">峰值</option><option value="LS">低架</option><option value="HS">高架</option></select><input className="input" aria-label={`第 ${index+1} 段频率`} type="number" min="20" max="20000" value={band.frequency} onChange={e=>change(index,'frequency',Number(e.target.value))}/><input className="input" aria-label={`第 ${index+1} 段增益`} type="number" min="-24" max="24" step="0.1" value={band.gain} onChange={e=>change(index,'gain',Number(e.target.value))}/><input className="input" aria-label={`第 ${index+1} 段 Q`} type="number" min="0.1" max="20" step="0.01" value={band.q} onChange={e=>change(index,'q',Number(e.target.value))}/></div>)}</div>{draft.preamp+Math.max(0,...draft.bands.filter(b=>b.enabled).map(b=>b.gain))>0&&<p className="muted small-text">存在正增益，建议降低前级以留出余量。</p>}{error&&<p className="inline-error">{error}</p>}<div className="editor-actions"><button className="button subtle" disabled={busy} onClick={()=>void read()}>导入 TXT</button><button className="button subtle" disabled={busy} onClick={()=>{setDraft(defaultPeq());setImported(true)}}>重置预览</button><button className="button primary" disabled={busy||!validPeq(draft)} onClick={()=>void apply()}>{busy?<LoaderCircle size={16} className="spin"/>:<Check size={16}/>}应用 PEQ</button></div></div>
 }
 export function PeqDialog(){const { provider, session, setPeqOpen } = useApp();return <Modal title="十段参数均衡器" subtitle="音效只影响播放，不会修改下载文件。" close={()=>setPeqOpen(false)} wide><PeqEditor/></Modal>}
 export function AddToPlaylistDialog(){

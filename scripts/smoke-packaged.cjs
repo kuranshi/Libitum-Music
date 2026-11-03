@@ -1,4 +1,4 @@
-const { _electron: electron } = require('@playwright/test')
+const { _electron: electron, expect } = require('@playwright/test')
 const fs = require('node:fs/promises'), os = require('node:os'), path = require('node:path')
 async function main() {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'cloud-music-package-check-'))
@@ -26,6 +26,20 @@ async function main() {
     await page.getByRole('tablist',{name:'音乐平台'}).waitFor()
     await page.getByRole('tab',{name:'QQ音乐',exact:true}).click()
     await page.getByRole('tab',{name:'QQ音乐',exact:true,selected:true}).waitFor()
+    await page.getByRole('button',{name:'设置',exact:true}).click()
+    await page.getByRole('button',{name:'音效',exact:true}).click()
+    await expect(page.getByRole('group',{name:'EQ 频响图',exact:true})).toBeVisible()
+    await page.getByLabel('启用十段 PEQ',{exact:true}).check()
+    await page.getByRole('button',{name:'第 1 段控制点',exact:true}).focus()
+    await page.keyboard.press('Shift+ArrowUp')
+    await expect(page.getByLabel('选中频段增益',{exact:true})).toHaveValue('1')
+    await page.getByLabel('PEQ 前级增益',{exact:true}).fill('-4')
+    await page.getByRole('button',{name:'应用 PEQ',exact:true}).click()
+    await expect.poll(async()=>{const value=await page.evaluate(()=>window.music.invoke('app.bootstrap'));return value.ok&&value.data.settings.peq}).toMatchObject({enabled:true,preamp:-4,bands:[{enabled:true,type:'PK',frequency:31,gain:1,q:1},...Array.from({length:9},(_,i)=>result.data.settings.peq.bands[i+1])]})
+    await expect(page.locator('.peq-total-curve')).toHaveAttribute('d',/^M/)
+    await page.getByRole('button',{name:'重置预览',exact:true}).click()
+    await page.getByRole('button',{name:'应用 PEQ',exact:true}).click()
+    await expect.poll(async()=>{const value=await page.evaluate(()=>window.music.invoke('app.bootstrap'));return value.ok&&value.data.settings.peq.enabled}).toBe(false)
     const opening=instance.waitForEvent('window')
     const enabled=await page.evaluate(()=>window.music.invoke('settings.update',{floatingEnabled:true,floatingOpacity:.5}))
     if(!enabled.ok)throw new Error('Packaged card did not enable')
@@ -36,7 +50,7 @@ async function main() {
     const mainControl=await card.evaluate(()=>window.music.invoke('window.close'));if(mainControl.ok)throw new Error('Packaged window control leak')
     const privateAccess=await card.evaluate(()=>window.music.invoke('app.bootstrap'))
     if(privateAccess.ok)throw new Error('Packaged card capability leak')
-    const report = { titlebarHeight,cardSize,cardBackgroundOpacity:.5,restrictedIPC:true,dualPlatformSelector:true,zeroPlatformsRejected:true,version: await instance.evaluate(({ app }) => app.getVersion()), packaged, playerAvailable: result.data.player.available, devices: result.data.player.devices.length, fixtureDisabled: Object.values(result.data.sessions).every(session=>session.user===null) }
+    const report = { graphicalEq:true,eqKeyboardApplyAndReset:true,titlebarHeight,cardSize,cardBackgroundOpacity:.5,restrictedIPC:true,dualPlatformSelector:true,zeroPlatformsRejected:true,version: await instance.evaluate(({ app }) => app.getVersion()), packaged, playerAvailable: result.data.player.available, devices: result.data.player.devices.length, fixtureDisabled: Object.values(result.data.sessions).every(session=>session.user===null) }
     if (process.argv.includes('--network')) {
       const home = await page.evaluate(() => window.music.invoke('home.section', { provider: 'netease', section: 'recommended' }))
       if (!home.ok || !home.data.collections.length) throw new Error('Packaged public homepage failed')

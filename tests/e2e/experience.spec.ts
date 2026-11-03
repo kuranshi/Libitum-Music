@@ -96,7 +96,7 @@ test('imports and applies a real PEQ preset while paused without losing progress
   await instance.evaluate(({dialog},path)=>{(dialog as any).showOpenDialog=async()=>({canceled:false,filePaths:[path]})},preset)
   await page.locator('.playback-options').getByRole('button',{name:'十段 PEQ',exact:true}).click()
   await page.getByRole('button',{name:'导入 TXT',exact:true}).click();await expect(page.getByText('已载入预览，尚未应用到播放。',{exact:true})).toBeVisible()
-  await expect(page.getByLabel('第 1 段增益',{exact:true})).toHaveValue('-3')
+  await expect(page.getByLabel('选中频段增益',{exact:true})).toHaveValue('-3')
   await page.getByRole('button',{name:'应用 PEQ',exact:true}).click()
   await expect.poll(async()=>{const result=await page.evaluate(()=>window.music.invoke('app.bootstrap'));return result.ok&&result.data.settings.peq.enabled}).toBe(true)
   const result=await page.evaluate(()=>window.music.invoke('app.bootstrap'));expect(result.ok&&result.data.player.status).toBe('paused');expect(Math.abs((result.ok?result.data.player.position:0)-originalPosition)).toBeLessThan(0.1)

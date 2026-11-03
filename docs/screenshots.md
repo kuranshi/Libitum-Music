@@ -13,16 +13,16 @@
 | [search-netease.png](images/search-netease.png) | “晚风”在网易云音乐端的搜索结果 | 内置示例曲目与歌手，底部保留同一首示例歌曲。 |
 | [search-qq.png](images/search-qq.png) | 同一关键词切换到 QQ 音乐结果 | QQ 内置示例曲目与歌手，切换后底部歌曲不变。 |
 | [listening.png](images/listening.png) | 深色播放详情、大封面和独立评论面板 | 合成曲目“晚风经过”、合成听众与示例评论；音频是脚本临时生成的静音 WAV。 |
-| [equalizer.png](images/equalizer.png) | 十段参数均衡器与前级 | 同一示例会话，通过真实界面修改并应用示例参数，不是耳机校准建议。 |
+| [equalizer.png](images/equalizer.png) | 图形频响、十段控制点、增益／Q 滑杆与前级 | v0.3.0-rc.2 中的编辑器；同一示例会话，通过真实界面修改并应用示例参数，不是耳机校准建议。 |
 | [mini-player.png](images/mini-player.png) | 独立悬浮播放卡片 | 同一示例曲目和真实播放器进度，独立 Electron 窗口。 |
 
 示例定义见 [`test-fixtures.ts`](../src/main/test-fixtures.ts) 与 [`qqmusic-fixtures.ts`](../src/main/qqmusic-fixtures.ts)。画面仅展示交互，不代表真实账号权限、同步或硬件验收已完成；边界见[验证记录](../VALIDATION.md)。
 
 ## 拍摄环境
 
-- 日期：2026-11-02。
+- 日期：2026-11-02；图形均衡器配图更新于 2026-11-03。
 - 使用项目锁定的 Electron 45.2.1 与生产构建的 main / preload / renderer，以无头模式拍摄应用内容区。
-- 首页、播放详情及搜索为 1440 × 940，账号卡片和 PEQ 为 1440 × 1100，悬浮卡片为 280 × 64；截图不包含系统窗口装饰。
+- 首页、播放详情及搜索为 1440 × 940，账号卡片为 1440 × 1100，图形 PEQ 为 1440 × 1400，悬浮卡片为 280 × 64；截图不包含系统窗口装饰。
 - 使用应用原有样式和系统字体，明确选择浅色或深色主题；不启用频谱采集。
 
 ## 复现截图
@@ -38,7 +38,7 @@ node scripts/capture-readme.cjs
 npm run audit:release
 ```
 
-默认命令会拍摄全部七张合成示例图；`--mini-only` 仅更新卡片。旧的 `--public-home` 选项可额外请求未登录的真实公开首页，但本页此次图片没有使用该选项。
+默认命令会拍摄全部七张合成示例图；`--mini-only` 仅更新卡片，`--equalizer-only` 仅更新均衡器。旧的 `--public-home` 选项可额外请求未登录的真实公开首页，但本页此次图片没有使用该选项。
 
 脚本只使用新建临时资料目录，不读取已有配置、Cookie、历史、下载或私人媒体；结束后关闭应用并删除临时目录。示例音频由本地临时 HTTP 服务提供，mpv 使用空输出，不播放到硬件。截图参数中的 `--no-sandbox` 仅用于这次隔离无头流程，日常运行使用 README 中的命令。
 

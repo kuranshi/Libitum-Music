@@ -1,5 +1,13 @@
 # 更新日志
 
+## 0.3.0-rc.2 — 图形均衡器（2026-11-03）
+
+应用版本为 `0.3.0-rc.2`，Debian 控制版本为 `0.3.0~rc.2`；提供 Linux x86_64 的 DEB、AppImage 与 SHA256SUMS，见 [Release](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.3.0-rc.2)。
+
+- EQ 新增图形频响编辑器，可拖动十个控制点调整频率与增益，支持键盘微调及双击增益归零。
+- 新增频段选择、增益／Q／前级滑杆和叠加频响余量提示，保留可展开的精确参数表与 TXT 预设导入。
+- 设置与播放弹窗共用图形编辑器，修改先预览、应用后保存，保持当前播放进度。
+
 ## 0.3.0-rc.1 — 双端同时登录与分页面切换（2026-11-02）
 
 本次预发布包含双平台并行会话、QQ 搜索／播放修复及壁纸一体标题栏。应用版本为 `0.3.0-rc.1`，Debian 控制版本为 `0.3.0~rc.1`；安装包、校验文件与说明见 [Release](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.3.0-rc.1)。

@@ -21,6 +21,7 @@ function Shell() {
   useEffect(() => { scroll.current?.scrollTo({ top: 0 }) }, [page])
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
       const element = event.target as HTMLElement
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); searchInput.current?.focus(); return }
       if (element.closest('input, textarea, select, button, [role="dialog"]') || loginOpen || downloadTracks) return

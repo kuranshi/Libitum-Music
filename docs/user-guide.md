@@ -48,9 +48,9 @@ QQ 不支持的功能不会改用网易云内容。播放或下载始终受对�
 
 ## 安装与升级
 
-当前预发布版本为 [`v0.3.0-rc.1`](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.3.0-rc.1)，包含本页双端同时登录与分页面切换功能。在发布页的 **Assets** 中下载安装包；`Source code.zip` 是源码。这是供体验和反馈的预发布版本，真实账号权限、同步及硬件兼容的验证范围见[验证记录](../VALIDATION.md)。
+当前预发布版本为 [`v0.3.0-rc.2`](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.3.0-rc.2)，包含图形 EQ、双端同时登录与分页面切换功能。在发布页的 **Assets** 中下载安装包；`Source code.zip` 是源码。这是供体验和反馈的预发布版本，真实账号权限、同步及硬件兼容的验证范围见[验证记录](../VALIDATION.md)。
 
-应用版本为 `0.3.0-rc.1`，Debian 控制版本为 `0.3.0~rc.1`；从旧版升级可直接使用下方 apt 安装命令，同版本覆盖可添加 `--reinstall`。
+应用版本为 `0.3.0-rc.2`，Debian 控制版本为 `0.3.0~rc.2`；从旧版升级可直接使用下方 apt 安装命令，同版本覆盖可添加 `--reinstall`。
 
 ### Ubuntu：推荐 .deb
 
@@ -58,7 +58,7 @@ QQ 不支持的功能不会改用网易云内容。播放或下载始终受对�
 
 ```bash
 sudo apt update
-sudo apt install ./libitum-music-0.3.0-rc.1-amd64.deb
+sudo apt install ./libitum-music-0.3.0-rc.2-amd64.deb
 cloud-music-player
 ```
 
@@ -68,13 +68,13 @@ cloud-music-player
 
 ### AppImage
 
-下载 `libitum-music-0.3.0-rc.1-x86_64.AppImage`。Ubuntu 24.04 可运行：
+下载 `libitum-music-0.3.0-rc.2-x86_64.AppImage`。Ubuntu 24.04 可运行：
 
 ```bash
 sudo apt update
 sudo apt install mpv ffmpeg pulseaudio-utils libsecret-1-0 libfuse2t64
-chmod +x ./libitum-music-0.3.0-rc.1-x86_64.AppImage
-./libitum-music-0.3.0-rc.1-x86_64.AppImage
+chmod +x ./libitum-music-0.3.0-rc.2-x86_64.AppImage
+./libitum-music-0.3.0-rc.2-x86_64.AppImage
 ```
 
 Ubuntu 22.04 请把 `libfuse2t64` 替换为 `libfuse2`。FUSE 2 与 FUSE 3 可以共存，无需卸载桌面正在使用的 FUSE 3。参见 [AppImage 的 FUSE 说明](https://docs.appimage.org/user-guide/troubleshooting/fuse.html)。
@@ -142,6 +142,12 @@ sha256sum -c SHA256SUMS --ignore-missing
 ## 十段 PEQ
 
 点击播放栏的均衡器按钮，或进入“设置 → 音效”。十段滤波器支持峰值、低架、高架、单段旁路及前级。点击“应用 PEQ”生效，无需重新开始歌曲；关闭总开关并应用可旁路整个均衡器。PEQ 仅影响播放，不修改下载文件，需要 mpv 的 lavfi 音频滤镜。
+
+频响图支持直接拖动圆点：横向调整频率，纵向调整增益；双击将该段增益归零。点击下方频段按钮可选中任一段，包括重叠或已旁路的频段，再用滑杆调整增益和 Q。圆点获得焦点后，方向键可微调，按住 Shift 加快，Home 将增益归零。
+
+实线是叠加前级与所有启用频段的频响，虚线是选中频段的单独频响。曲线按 48 kHz 估算，实际响应取决于歌曲采样率；关闭总开关时仍保留编辑预览。展开“精确参数 · 全部十段”可直接输入每段的类型、频率、增益和 Q，输入越界时无法应用。修改与导入均先预览，关闭窗口会放弃未应用的修改，已应用参数会保存并在重启后恢复。
+
+![图形均衡器：频响曲线与频段调节](images/equalizer.png)
 
 可导入 APO／AutoEQ 文本或每行“频率、增益、Q”三列文本。以下为合成示例：
 

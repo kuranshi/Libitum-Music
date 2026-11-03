@@ -122,7 +122,7 @@ LIBITUM_QQ_QR_SMOKE=1 npx vitest run tests/unit/qqmusic.test.ts
 
 完整账号验收请使用自己的账号在应用内登录完成：收藏及取消一个歌单、一个专辑，在官方客户端核对，再重启检查状态。不要将真实凭证写入自动化脚本或测试样例。模拟收藏流程通过不证明服务端权限、风控或真实同步已通过验收。
 
-当前预发布版本为 [`v0.3.0-rc.1`](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.3.0-rc.1)，由 `main` 构建。发布状态与实际验证范围应同时核对[更新日志](../CHANGELOG.md)、验证记录与 Releases。
+当前预发布版本为 [`v0.3.0-rc.2`](https://github.com/kuranshi/Libitum-Music/releases/tag/v0.3.0-rc.2)，由 `main` 构建。发布状态与实际验证范围应同时核对[更新日志](../CHANGELOG.md)、验证记录与 Releases。
 
 ### Ubuntu 22.04 隔离兼容
 
@@ -163,7 +163,7 @@ npm run package:deb
 npm run package:dir
 ```
 
-产物位于 `release/`，当前目标为 Linux x86_64。安装包名为 `libitum-music-0.3.0-rc.1-x86_64.AppImage` 与 `libitum-music-0.3.0-rc.1-amd64.deb`。应用和 npm 版本为 `0.3.0-rc.1`，Debian 控制字段使用 `0.3.0~rc.1`，确保候选版先于未来正式版排序；文件名保留 SemVer 形式。Debian 内部包名和命令入口保持 `cloud-music-player`。构建配置位于 `package.json`，`.deb` 依赖由配置统一读取。
+产物位于 `release/`，当前目标为 Linux x86_64。安装包名为 `libitum-music-0.3.0-rc.2-x86_64.AppImage` 与 `libitum-music-0.3.0-rc.2-amd64.deb`。应用和 npm 版本为 `0.3.0-rc.2`，Debian 控制字段使用 `0.3.0~rc.2`，确保候选版先于未来正式版排序；文件名保留 SemVer 形式。Debian 内部包名和命令入口保持 `cloud-music-player`。构建配置位于 `package.json`，`.deb` 依赖由配置统一读取。
 
 打包后可检查正式运行与包内内容：
 
